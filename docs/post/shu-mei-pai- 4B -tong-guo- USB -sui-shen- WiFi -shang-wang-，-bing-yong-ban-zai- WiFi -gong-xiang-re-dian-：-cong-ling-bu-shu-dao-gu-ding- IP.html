@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html data-color-mode="light" data-dark-theme="dark" data-light-theme="light" lang="zh-CN">
+<head>
+    <meta content="text/html; charset=utf-8" http-equiv="content-type" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <link href='https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/Primer/21.0.7/primer.css' rel='stylesheet' />
+    
+    <link rel="icon" href="https://github.githubassets.com/favicons/favicon.svg"><script>
+        let theme = localStorage.getItem("meek_theme") || "light";
+        document.documentElement.setAttribute("data-color-mode", theme);
+    </script>
+<meta name="description" content="<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>树莓派 4B 通过 USB 随身 WiFi 上网，并用板载 WiFi 共享热点：从零部署到固定 IP</h1><h2>前言</h2><p>这篇文章记录一次树莓派 4B 网络共享的完整部署过程。">
+<meta property="og:title" content="树莓派 4B 通过 USB 随身 WiFi 上网，并用板载 WiFi 共享热点：从零部署到固定 IP">
+<meta property="og:description" content="<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>树莓派 4B 通过 USB 随身 WiFi 上网，并用板载 WiFi 共享热点：从零部署到固定 IP</h1><h2>前言</h2><p>这篇文章记录一次树莓派 4B 网络共享的完整部署过程。">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://yang-yang-NO-1.github.io/blog/post/shu-mei-pai-%204B%20-tong-guo-%20USB%20-sui-shen-%20WiFi%20-shang-wang-%EF%BC%8C-bing-yong-ban-zai-%20WiFi%20-gong-xiang-re-dian-%EF%BC%9A-cong-ling-bu-shu-dao-gu-ding-%20IP.html">
+<meta property="og:image" content="https://github.githubassets.com/favicons/favicon.svg">
+<title>树莓派 4B 通过 USB 随身 WiFi 上网，并用板载 WiFi 共享热点：从零部署到固定 IP</title>
+
+
+
+</head>
+<style>
+body{box-sizing: border-box;min-width: 200px;max-width: 900px;margin: 20px auto;padding: 45px;font-size: 16px;font-family: sans-serif;line-height: 1.25;}
+#header{display:flex;padding-bottom:8px;border-bottom: 1px solid var(--borderColor-muted, var(--color-border-muted));margin-bottom: 16px;}
+#footer {margin-top:64px; text-align: center;font-size: small;}
+
+</style>
+
+<style>
+.postTitle{margin: auto 0;font-size:40px;font-weight:bold;}
+.title-right{display:flex;margin:auto 0 0 auto;}
+.title-right .circle{padding: 14px 16px;margin-right:8px;}
+#postBody{border-bottom: 1px solid var(--color-border-default);padding-bottom:36px;}
+#postBody hr{height:2px;}
+#cmButton{height:48px;margin-top:48px;}
+#comments{margin-top:64px;}
+.g-emoji{font-size:24px;}
+@media (max-width: 600px) {
+    body {padding: 8px;}
+    .postTitle{font-size:24px;}
+}
+.copy-feedback {
+    display: none;
+    position: absolute;
+    top: 10px;
+    right: 50px;
+    color: var(--color-fg-on-emphasis);
+    background-color: var(--color-fg-muted);
+    border-radius: 3px;
+    padding: 5px 8px;
+    font-size: 12px;
+}
+</style>
+
+
+
+
+<body>
+    <div id="header">
+<h1 class="postTitle">树莓派 4B 通过 USB 随身 WiFi 上网，并用板载 WiFi 共享热点：从零部署到固定 IP</h1>
+<div class="title-right">
+    <a href="https://yang-yang-NO-1.github.io/blog" id="buttonHome" class="btn btn-invisible circle" title="首页">
+        <svg class="octicon" width="16" height="16">
+            <path id="pathHome" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+    
+    <a href="https://github.com/yang-yang-NO-1/blog/issues/2" target="_blank" class="btn btn-invisible circle" title="Issue">
+        <svg class="octicon" width="16" height="16">
+            <path id="pathIssue" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+    
+
+    <a class="btn btn-invisible circle" onclick="modeSwitch();" title="切换主题">
+        <svg class="octicon" width="16" height="16" >
+            <path id="themeSwitch" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+
+</div>
+</div>
+    <div id="content">
+<div class="markdown-body" id="postBody">
+
+<h1>树莓派 4B 通过 USB 随身 WiFi 上网，并用板载 WiFi 共享热点：从零部署到固定 IP</h1><h2>前言</h2><p>这篇文章记录一次树莓派 4B 网络共享的完整部署过程。</p><p>最终目标是：</p><ul><li><p>树莓派通过 <strong>USB 随身 WiFi / USB 网卡</strong> 上网；</p></li><li><p>使用树莓派 4B 的 <strong>板载 WiFi</strong> 开启热点；</p></li><li><p>手机、电脑等设备连接树莓派热点后可以正常上网；</p></li><li><p>热点网段固定为 <code class="notranslate">192.168.0.x</code>；</p></li><li><p>NAT、转发规则和热点服务均支持 <strong>开机自启</strong>；</p></li><li><p>支持给连接热点的设备按 MAC 地址分配固定 IP。</p></li></ul><p>最终网络拓扑如下：</p><pre class="notranslate"><code class="notranslate">USB 随身 WiFi / 4G 网卡
+        ↓
+usb0：树莓派外网入口
+        ↓
+树莓派 4B
+        ↓
+wlan0：板载 WiFi 热点
+        ↓
+手机 / 电脑 / 摄像头等设备
+</code></pre><p>本文以如下配置为例：</p><pre class="notranslate"><code class="notranslate">外网入口接口：usb0
+热点接口：wlan0
+热点名称：HP-001GR
+热点网段：192.168.0.0/24
+热点网关：192.168.0.1
+热点连接名：PiHotspot
+有线管理口：eth0
+</code></pre><blockquote><p>注意：本文中所有密码都请替换成你自己的密码，不建议把真实热点密码直接写进公开博客。</p></blockquote><hr><h2>一、适用环境</h2><p>本文适用于：</p><ul><li><p>Raspberry Pi 4B；</p></li><li><p>Raspberry Pi OS Bookworm 或使用 NetworkManager 管理网络的系统；</p></li><li><p>USB 随身 WiFi / 4G 模块在系统中识别为 <code class="notranslate">usb0</code>、<code class="notranslate">eth1</code> 或 <code class="notranslate">enx...</code> 这类以太网接口；</p></li><li><p>使用树莓派板载 <code class="notranslate">wlan0</code> 开热点。</p></li></ul><p>如果你的接口名称不同，请根据 <code class="notranslate">nmcli dev status</code> 的输出替换命令中的接口名。</p><hr><h2>二、先确认网络接口</h2><p>执行：</p><pre class="notranslate"><code class="notranslate">nmcli dev status
+ip link
+ip route
+</code></pre><p>正常情况下可以看到类似：</p><pre class="notranslate"><code class="notranslate">DEVICE  TYPE      STATE      CONNECTION
+usb0    ethernet  connected  usb-wifi
+eth0    ethernet  connected  netplan-eth0
+wlan0   wifi      disconnected  --
+lo      loopback  connected  lo
+</code></pre><p>这里的含义是：</p>
+接口 | 作用
+-- | --
+usb0 | USB 随身 WiFi / 4G 网卡，上网入口
+wlan0 | 树莓派板载 WiFi，用来开热点
+eth0 | 有线网口，可作为 SSH 管理口
+lo | 本地回环接口，不用管
+<p>如果 <code class="notranslate">wlan0</code> 显示为 <code class="notranslate">unavailable</code>，先执行：</p><pre class="notranslate"><code class="notranslate">sudo nmcli radio wifi on
+sudo rfkill unblock wifi
+nmcli dev status
+</code></pre><p>如果还是不可用，设置 WLAN Country：</p><pre class="notranslate"><code class="notranslate">sudo raspi-config
+</code></pre><p>进入：</p><pre class="notranslate"><code class="notranslate">Localisation Options → WLAN Country
+</code></pre><p>选择你的实际国家或地区，然后重启：</p><pre class="notranslate"><code class="notranslate">sudo reboot
+</code></pre><hr><h2>三、安装必要组件</h2><p>NetworkManager 的热点共享模式需要 <code class="notranslate">dnsmasq</code> 组件来给热点客户端分配 DHCP 地址。</p><p>执行：</p><pre class="notranslate"><code class="notranslate">sudo apt update
+sudo apt install -y dnsmasq-base iptables
+</code></pre><p>关闭独立 <code class="notranslate">dnsmasq</code> 服务，避免和 NetworkManager 内部启动的 dnsmasq 冲突：</p><pre class="notranslate"><code class="notranslate">sudo systemctl disable --now dnsmasq 2&gt;/dev/null || true
+</code></pre><p>确认 dnsmasq 存在：</p><pre class="notranslate"><code class="notranslate">command -v dnsmasq
+</code></pre><p>正常应输出：</p><pre class="notranslate"><code class="notranslate">/usr/sbin/dnsmasq
+</code></pre><hr><h2>四、配置 USB 随身 WiFi 为默认外网入口</h2><p>如果你的 USB 上网接口已经有 NetworkManager 连接，例如叫 <code class="notranslate">usb-wifi</code>，直接修改即可：</p><pre class="notranslate"><code class="notranslate">sudo nmcli connection modify usb-wifi \
+  connection.autoconnect yes \
+  connection.autoconnect-priority 100 \
+  ipv4.method auto \
+  ipv4.route-metric 50
+</code></pre><p>如果没有这个连接，可以新建：</p><pre class="notranslate"><code class="notranslate">sudo nmcli connection add type ethernet ifname usb0 con-name usb-wifi ipv4.method auto
+</code><p><code class="notranslate">sudo nmcli connection modify usb-wifi <br>
+connection.autoconnect yes <br>
+connection.autoconnect-priority 100 <br>
+ipv4.route-metric 50<br>
+</code></p></pre><p>启动 USB 上网连接：</p><pre class="notranslate"><code class="notranslate">sudo nmcli connection up usb-wifi<br>
+</code></pre><p>检查路由：</p><pre class="notranslate"><code class="notranslate">ip route<br>
+</code></pre><p>理想情况下应该看到类似：</p><pre class="notranslate"><code class="notranslate">default via 192.168.99.1 dev usb0 metric 50<br>
+</code></pre><p>这表示树莓派默认上网出口已经优先走 <code class="notranslate">usb0</code>。</p><hr><h2>五、降低 eth0 有线网口优先级</h2><p>如果你还插着网线，<code class="notranslate">eth0</code> 可能会抢默认路由。建议保留 <code class="notranslate">eth0</code> 用于 SSH 管理，但降低它的优先级。</p><p>先看连接名：</p><pre class="notranslate"><code class="notranslate">nmcli connection show<br>
+</code></pre><p>如果有线连接名是 <code class="notranslate">netplan-eth0</code>，执行：</p><pre class="notranslate"><code class="notranslate">sudo nmcli connection modify netplan-eth0 <br>
+connection.autoconnect yes <br>
+connection.autoconnect-priority 50 <br>
+ipv4.route-metric 300<br>
+</code></pre><p>这样最终路由优先级为：</p><pre class="notranslate"><code class="notranslate">usb0：metric 50，优先作为上网出口<br>
+eth0：metric 300，只作为备用或管理口<br>
+</code></pre><p>再次查看：</p><pre class="notranslate"><code class="notranslate">ip route<br>
+</code></pre><p>理想结果类似：</p><pre class="notranslate"><code class="notranslate">default via 192.168.99.1 dev usb0 metric 50<br>
+default via 192.168.137.1 dev eth0 metric 300<br>
+</code></pre><hr><h2>六、创建板载 WiFi 热点</h2><p>先清理旧热点配置：</p><pre class="notranslate"><code class="notranslate">sudo nmcli connection delete PiHotspot 2&gt;/dev/null || true<br>
+sudo nmcli device disconnect wlan0 2&gt;/dev/null || true<br>
+sudo ip addr flush dev wlan0 2&gt;/dev/null || true<br>
+</code></pre><p>设置热点名称和密码变量：</p><pre class="notranslate"><code class="notranslate">HOTSPOT_SSID="HP-001GR"<br>
+HOTSPOT_PASS="请改成你自己的热点密码"<br>
+</code></pre><p>创建热点：</p><pre class="notranslate"><code class="notranslate">sudo nmcli dev wifi hotspot ifname wlan0 con-name PiHotspot ssid "$HOTSPOT_SSID" password "$HOTSPOT_PASS"<br>
+</code></pre><p>然后固定热点参数：</p><pre class="notranslate"><code class="notranslate">sudo nmcli connection modify PiHotspot <br>
+connection.autoconnect yes <br>
+connection.autoconnect-priority 90 <br>
+802-11-wireless.mode ap <br>
+802-11-wireless.band bg <br>
+802-11-wireless.channel 6 <br>
+wifi-sec.key-mgmt wpa-psk <br>
+wifi-sec.psk "$HOTSPOT_PASS" <br>
+ipv4.method shared <br>
+ipv4.addresses 192.168.0.1/24 <br>
+ipv4.never-default yes <br>
+ipv6.method ignore<br>
+</code></pre><p>说明：</p><pre class="notranslate"><code class="notranslate">802-11-wireless.band bg     表示 2.4G 热点<br>
+802-11-wireless.channel 6   表示使用 2.4G 的 6 信道<br>
+ipv4.method shared          表示开启共享网络、DHCP 和 NAT 基础能力<br>
+ipv4.addresses 192.168.0.1/24  表示热点网关固定为 192.168.0.1<br>
+ipv4.never-default yes      表示热点接口不作为默认上网出口<br>
+</code></pre><p>重启热点：</p><pre class="notranslate"><code class="notranslate">sudo nmcli connection down PiHotspot 2&gt;/dev/null || true<br>
+sudo ip addr flush dev wlan0 2&gt;/dev/null || true<br>
+sudo nmcli connection up PiHotspot<br>
+</code></pre><p>检查：</p><pre class="notranslate"><code class="notranslate">nmcli dev status<br>
+ip addr show wlan0<br>
+</code></pre><p>正常应该看到：</p><pre class="notranslate"><code class="notranslate">wlan0  wifi  connected  PiHotspot<br>
+</code></pre><p>并且 <code class="notranslate">wlan0</code> 有：</p><pre class="notranslate"><code class="notranslate">inet 192.168.0.1/24<br>
+</code></pre><hr><h2>七、永久开启 IPv4 转发</h2><p>Linux 默认不一定允许不同网卡之间转发流量。热点共享必须开启 IPv4 forwarding。</p><p>执行：</p><pre class="notranslate"><code class="notranslate">echo 'net.ipv4.ip_forward=1' | sudo tee /etc/sysctl.d/99-hotspot-forward.conf<br>
+sudo sysctl --system<br>
+</code></pre><p>确认：</p><pre class="notranslate"><code class="notranslate">cat /proc/sys/net/ipv4/ip_forward<br>
+</code></pre><p>正常输出：</p><pre class="notranslate"><code class="notranslate">1<br>
+</code></pre><hr><h2>八、创建 NAT / FORWARD 规则脚本</h2><p>虽然 NetworkManager 的 <code class="notranslate">shared</code> 模式会处理一部分共享逻辑，但如果系统里有 Docker，Docker 可能会影响 <code class="notranslate">FORWARD</code> 链规则。为了稳定，建议手动建立一套热点转发脚本，并通过 systemd 开机自动执行。</p><p>创建脚本：</p><pre class="notranslate"><code class="notranslate">sudo tee /usr/local/sbin/hotspot-forward.sh &gt;/dev/null &lt;&lt;'EOF'<br>
+#!/usr/bin/env bash<br>
+set -u<p></p>
+<p>IPT="/usr/sbin/iptables"<br>
+SYSCTL="/usr/sbin/sysctl"</p>
+<h1>开启 IPv4 转发</h1>
+<p>$SYSCTL -w net.ipv4.ip_forward=1 &gt;/dev/null</p>
+<h1>删除旧热点网段 NAT</h1>
+<p>while $IPT -w -t nat -D POSTROUTING -s 10.42.0.0/24 -o usb0 -j MASQUERADE 2&gt;/dev/null; do :; done</p>
+<h1>删除可能重复的新 NAT</h1>
+<p>while $IPT -w -t nat -D POSTROUTING -s 192.168.0.0/24 -o usb0 -j MASQUERADE 2&gt;/dev/null; do :; done</p>
+<h1>删除可能重复的 FORWARD 规则</h1>
+<p>while $IPT -w -D FORWARD -i wlan0 -o usb0 -j ACCEPT 2&gt;/dev/null; do :; done<br>
+while $IPT -w -D FORWARD -i usb0 -o wlan0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2&gt;/dev/null; do :; done<br>
+while $IPT -w -D FORWARD -i usb0 -o wlan0 -j ACCEPT 2&gt;/dev/null; do :; done</p>
+<h1>允许热点客户端通过 usb0 出网</h1>
+<p>$IPT -w -I FORWARD 1 -i wlan0 -o usb0 -j ACCEPT</p>
+<h1>允许 usb0 回包到热点客户端</h1>
+<p>$IPT -w -I FORWARD 1 -i usb0 -o wlan0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT || <br>
+$IPT -w -I FORWARD 1 -i usb0 -o wlan0 -j ACCEPT</p>
+<h1>NAT：192.168.0.x 通过 usb0 出网</h1>
+<p>$IPT -w -t nat -A POSTROUTING -s 192.168.0.0/24 -o usb0 -j MASQUERADE</p>
+</code><p><code class="notranslate">exit 0<br>
+EOF<br>
+</code></p></pre><p>赋予执行权限：</p><pre class="notranslate"><code class="notranslate">sudo chmod +x /usr/local/sbin/hotspot-forward.sh<br>
+</code></pre><p>手动测试脚本：</p><pre class="notranslate"><code class="notranslate">sudo /usr/local/sbin/hotspot-forward.sh<br>
+echo $?<br>
+</code></pre><p>正常输出：</p><pre class="notranslate"><code class="notranslate">0<br>
+</code></pre><hr><h2>九、创建 systemd 开机自启服务</h2><p>创建服务文件：</p><pre class="notranslate"><code class="notranslate">sudo tee /etc/systemd/system/hotspot-forward.service &gt;/dev/null &lt;&lt;'EOF'<br>
+[Unit]<br>
+Description=Hotspot NAT and Forwarding Rules<br>
+After=NetworkManager.service docker.service<br>
+Wants=NetworkManager.service<p></p>
+<p>[Service]<br>
+Type=oneshot<br>
+ExecStart=/usr/local/sbin/hotspot-forward.sh<br>
+RemainAfterExit=yes</p>
+</code><p><code class="notranslate">[Install]<br>
+WantedBy=multi-user.target<br>
+EOF<br>
+</code></p></pre><p>启用并立即启动：</p><pre class="notranslate"><code class="notranslate">sudo systemctl daemon-reload<br>
+sudo systemctl enable hotspot-forward.service<br>
+sudo systemctl restart hotspot-forward.service<br>
+</code></pre><p>检查服务状态：</p><pre class="notranslate"><code class="notranslate">systemctl is-active hotspot-forward.service<br>
+systemctl is-enabled hotspot-forward.service<br>
+</code></pre><p>正常应该输出：</p><pre class="notranslate"><code class="notranslate">active<br>
+enabled<br>
+</code></pre><p>如果查看完整状态：</p><pre class="notranslate"><code class="notranslate">sudo systemctl status hotspot-forward.service --no-pager<br>
+</code></pre><p>正常应看到：</p><pre class="notranslate"><code class="notranslate">active (exited)<br>
+</code></pre><p><code class="notranslate">oneshot</code> 类型服务运行完脚本后退出是正常的，因为规则已经写入内核网络栈。</p><hr><h2>十、最终验证</h2><p>执行：</p><pre class="notranslate"><code class="notranslate">nmcli dev status<br>
+ip addr show wlan0<br>
+ip route<br>
+cat /proc/sys/net/ipv4/ip_forward<br>
+sudo iptables -t nat -S | grep 192.168.0<br>
+sudo iptables -S FORWARD | grep -E "wlan0|usb0"<br>
+</code></pre><p>理想结果应该包含：</p><pre class="notranslate"><code class="notranslate">wlan0 connected PiHotspot<br>
+usb0 connected usb-wifi<br>
+inet 192.168.0.1/24<br>
+default via 192.168.99.1 dev usb0 metric 50<br>
+1<br>
+-A POSTROUTING -s 192.168.0.0/24 -o usb0 -j MASQUERADE<br>
+-A FORWARD -i usb0 -o wlan0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT<br>
+-A FORWARD -i wlan0 -o usb0 -j ACCEPT<br>
+</code></pre><p>此时手机连接热点后，应获得：</p><pre class="notranslate"><code class="notranslate">IP：192.168.0.x<br>
+网关：192.168.0.1<br>
+DNS：192.168.0.1<br>
+</code></pre><p>并可以正常上网。</p><hr><h2>十一、重启验证</h2><p>执行：</p><pre class="notranslate"><code class="notranslate">sudo reboot<br>
+</code></pre><p>重启后再次检查：</p><pre class="notranslate"><code class="notranslate">nmcli dev status<br>
+ip addr show wlan0<br>
+ip route<br>
+systemctl is-active hotspot-forward.service<br>
+systemctl is-enabled hotspot-forward.service<br>
+sudo iptables -t nat -S | grep 192.168.0<br>
+sudo iptables -S FORWARD | grep -E "wlan0|usb0"<br>
+</code></pre><p>正常应看到：</p><pre class="notranslate"><code class="notranslate">wlan0 connected PiHotspot<br>
+usb0 connected usb-wifi<br>
+wlan0 inet 192.168.0.1/24<br>
+default route 走 usb0<br>
+hotspot-forward.service active<br>
+hotspot-forward.service enabled<br>
+NAT 和 FORWARD 规则存在<br>
+</code></pre><hr><h2>十二、给连接热点的设备分配固定 IP</h2><p>前面已经让热点网段固定为：</p><pre class="notranslate"><code class="notranslate">192.168.0.0/24<br>
+</code></pre><p>树莓派热点网关为：</p><pre class="notranslate"><code class="notranslate">192.168.0.1<br>
+</code></pre><p>接下来可以通过 DHCP 静态绑定，让指定设备每次连接热点时都获得固定 IP。</p><h3>1. 查看客户端 MAC 地址</h3><p>让手机、电脑或摄像头先连接热点，然后在树莓派上执行：</p><pre class="notranslate"><code class="notranslate">ip neigh show dev wlan0<br>
+</code></pre><p>输出类似：</p><pre class="notranslate"><code class="notranslate">192.168.0.23 dev wlan0 lladdr aa:bb:cc:dd:ee:ff REACHABLE<br>
+</code></pre><p>其中：</p><pre class="notranslate"><code class="notranslate">aa:bb:cc:dd:ee:ff<br>
+</code></pre><p>就是客户端 MAC 地址。</p><p>也可以用：</p><pre class="notranslate"><code class="notranslate">sudo arp -n -i wlan0<br>
+</code></pre><hr><h3>2. 创建 dnsmasq 静态租约配置目录</h3><pre class="notranslate"><code class="notranslate">sudo mkdir -p /etc/NetworkManager/dnsmasq-shared.d<br>
+</code></pre><p>创建静态 IP 配置文件：</p><pre class="notranslate"><code class="notranslate">sudo nano /etc/NetworkManager/dnsmasq-shared.d/hotspot-static-leases.conf<br>
+</code></pre><p>写入固定 IP 规则。</p><p>示例：</p><pre class="notranslate"><code class="notranslate"># 格式：dhcp-host=MAC地址,固定IP,主机名,租期<br>
+dhcp-host=aa:bb:cc:dd:ee:ff,192.168.0.20,phone01,infinite<br>
+dhcp-host=11:22:33:44:55:66,192.168.0.21,laptop01,infinite<br>
+dhcp-host=66:55:44:33:22:11,192.168.0.22,camera01,infinite<br>
+</code></pre><p>建议规划：</p><pre class="notranslate"><code class="notranslate">192.168.0.1      树莓派热点网关，不要分配给客户端<br>
+192.168.0.2-19   保留<br>
+192.168.0.20-99  固定 IP 设备<br>
+192.168.0.100+   临时 DHCP 设备<br>
+</code></pre><hr><h3>3. 重启热点让静态绑定生效</h3><pre class="notranslate"><code class="notranslate">sudo nmcli connection down PiHotspot<br>
+sudo nmcli connection up PiHotspot<br>
+</code></pre><p>或者重启 NetworkManager：</p><pre class="notranslate"><code class="notranslate">sudo systemctl restart NetworkManager<br>
+</code></pre><p>然后让客户端断开 WiFi，再重新连接热点。</p><hr><h3>4. 验证固定 IP</h3><p>执行：</p><pre class="notranslate"><code class="notranslate">ip neigh show dev wlan0<br>
+</code></pre><p>如果配置成功，可以看到类似：</p><pre class="notranslate"><code class="notranslate">192.168.0.20 dev wlan0 lladdr aa:bb:cc:dd:ee:ff REACHABLE<br>
+</code></pre><p>也可以在手机 WiFi 详情里查看：</p><pre class="notranslate"><code class="notranslate">IP 地址：192.168.0.20<br>
+网关：192.168.0.1<br>
+DNS：192.168.0.1<br>
+</code></pre><hr><h2>十三、手机固定 IP 注意事项：关闭随机 MAC</h2><p>如果是手机连接热点，很多 Android / iOS 设备默认启用“随机 MAC”或“私有 WiFi 地址”。</p><p>如果开启随机 MAC，树莓派看到的 MAC 地址可能会变化，导致 DHCP 静态绑定失效。</p><p>建议进入手机的 WiFi 设置：</p><pre class="notranslate"><code class="notranslate">WiFi → HP-001GR → 隐私 / MAC 地址类型<br>
+</code></pre><p>改成：</p><pre class="notranslate"><code class="notranslate">使用设备 MAC<br>
+</code></pre><p>或者关闭：</p><pre class="notranslate"><code class="notranslate">随机 MAC / 私有 WiFi 地址<br>
+</code></pre><p>然后重新连接热点。</p><hr><h2>十四、常用排错命令</h2><h3>1. 查看接口状态</h3><pre class="notranslate"><code class="notranslate">nmcli dev status<br>
+ip addr show wlan0<br>
+ip route<br>
+</code></pre><p>重点看：</p><pre class="notranslate"><code class="notranslate">wlan0 是否 connected PiHotspot<br>
+usb0 是否 connected usb-wifi<br>
+wlan0 是否是 192.168.0.1/24<br>
+默认路由是否走 usb0<br>
+</code></pre><hr><h3>2. 查看热点密码</h3><pre class="notranslate"><code class="notranslate">nmcli dev wifi show-password<br>
+</code></pre><hr><h3>3. 查看热点客户端</h3><pre class="notranslate"><code class="notranslate">ip neigh show dev wlan0<br>
+sudo arp -n -i wlan0<br>
+</code></pre><hr><h3>4. 查看 IPv4 转发</h3><pre class="notranslate"><code class="notranslate">cat /proc/sys/net/ipv4/ip_forward<br>
+</code></pre><p>正常应输出：</p><pre class="notranslate"><code class="notranslate">1<br>
+</code></pre><hr><h3>5. 查看 NAT 规则</h3><pre class="notranslate"><code class="notranslate">sudo iptables -t nat -S | grep 192.168.0<br>
+</code></pre><p>正常应有：</p><pre class="notranslate"><code class="notranslate">-A POSTROUTING -s 192.168.0.0/24 -o usb0 -j MASQUERADE<br>
+</code></pre><hr><h3>6. 查看转发规则</h3><pre class="notranslate"><code class="notranslate">sudo iptables -S FORWARD | grep -E "wlan0|usb0"<br>
+</code></pre><p>正常应有：</p><pre class="notranslate"><code class="notranslate">-A FORWARD -i usb0 -o wlan0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT<br>
+-A FORWARD -i wlan0 -o usb0 -j ACCEPT<br>
+</code></pre><hr><h3>7. 手动恢复热点</h3><p>如果开机后热点异常，可以执行：</p><pre class="notranslate"><code class="notranslate">sudo nmcli radio wifi on<br>
+sudo rfkill unblock wifi<br>
+sudo nmcli connection up usb-wifi<br>
+sudo nmcli connection up PiHotspot<br>
+sudo systemctl restart hotspot-forward.service<br>
+</code></pre><hr><h2>十五、完整配置总结</h2><p>最终配置如下：</p><pre class="notranslate"><code class="notranslate">usb0：<br>
+作用：USB 随身 WiFi / 4G 网卡，上网入口<br>
+路由优先级：metric 50<br>
+开机自动连接：是<p></p>
+<p>eth0：<br>
+作用：有线管理口 / SSH 管理口<br>
+路由优先级：metric 300<br>
+不抢默认出口</p>
+<p>wlan0：<br>
+作用：树莓派板载 WiFi 热点<br>
+热点名称：HP-001GR<br>
+频段：2.4G<br>
+信道：6<br>
+网关：192.168.0.1<br>
+客户端网段：192.168.0.x<br>
+开机自动启动：是</p>
+<p>系统转发：<br>
+net.ipv4.ip_forward = 1</p>
+<p>NAT：<br>
+192.168.0.0/24 → usb0 MASQUERADE</p>
+<p>systemd：<br>
+hotspot-forward.service 开机自动恢复 NAT / FORWARD 规则</p>
+</code><p><code class="notranslate">固定 IP：<br>
+通过 /etc/NetworkManager/dnsmasq-shared.d/hotspot-static-leases.conf<br>
+使用 dhcp-host=MAC,IP,hostname,infinite 绑定<br>
+</code></p></pre><hr><h2>十六、需要注意的坑</h2><h3>1. 192.168.0.x 容易和上游路由器冲突</h3><p><code class="notranslate">192.168.0.0/24</code> 是很多家用路由器的默认网段。如果以后 <code class="notranslate">usb0</code> 上游也变成了 <code class="notranslate">192.168.0.x</code>，热点网段就会和上游冲突，客户端可能无法上网。</p><p>如果发生冲突，建议把热点网段改成：</p><pre class="notranslate"><code class="notranslate">192.168.50.1/24<br>
+192.168.88.1/24<br>
+10.42.0.1/24<br>
+</code></pre><h3>2. 树莓派 4B 板载 WiFi 不能同时开 2.4G 和 5G 热点</h3><p>树莓派 4B 支持 2.4G 和 5G，但板载 WiFi 只有一个无线接口，同一时间只能开一个频段的热点。</p><p>如果要同时开 2.4G 和 5G，需要额外插一个支持 AP 模式的 USB WiFi 网卡。</p><h3>3. 手机随机 MAC 会影响固定 IP</h3><p>如果固定 IP 不生效，优先检查手机是否开启了随机 MAC。</p><h3>4. Docker 可能影响转发规则</h3><p>如果系统里运行 Docker，可能会改写 <code class="notranslate">FORWARD</code> 链。本文使用 <code class="notranslate">hotspot-forward.service</code> 每次开机主动恢复规则，目的就是降低 Docker 对热点转发的影响。</p><hr><h2>结语</h2><p>到这里，树莓派 4B 就可以作为一个小型网络共享设备使用：</p><pre class="notranslate"><code class="notranslate">USB 随身 WiFi 上网<br>
+↓<br>
+树莓派 4B NAT 转发<br>
+↓<br>
+板载 WiFi 发热点<br>
+↓<br>
+手机、电脑、摄像头等设备联网<br>
+</code></pre><p>这套方案的优点是配置简单、成本低、可以开机自启，并且能通过 DHCP 静态绑定给重要设备分配固定 IP。对于临时组网、摄像头接入、IoT 设备调试、小型局域网测试都比较实用。</p><p></p>
+
+</div>
+<div style="font-size:small;margin-top:8px;float:right;"></div>
+
+<button class="btn btn-block" type="button" onclick="openComments()" id="cmButton">评论</button>
+<div class="comments" id="comments"></div>
+
+</div>
+    <div id="footer"><div id="footer1">Copyright © <span id="copyrightYear"></span> <a href="https://yang-yang-NO-1.github.io/blog">Blog Title</a></div>
+<div id="footer2">
+    <span id="runday"></span><span>Powered by <a href="https://meekdai.com/Gmeek.html" target="_blank">Gmeek</a></span>
+</div>
+
+<script>
+var now=new Date();
+document.getElementById("copyrightYear").innerHTML=now.getFullYear();
+
+if(""!=""){
+    var startSite=new Date("");
+    var diff=now.getTime()-startSite.getTime();
+    var diffDay=Math.floor(diff/(1000*60*60*24));
+    document.getElementById("runday").innerHTML="网站运行 "+diffDay+" 天"+" • ";
+}
+</script></div>
+</body>
+<script>
+var IconList={'sun': 'M8 10.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0V.75A.75.75 0 018 0zm0 13a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 018 13zM2.343 2.343a.75.75 0 011.061 0l1.06 1.061a.75.75 0 01-1.06 1.06l-1.06-1.06a.75.75 0 010-1.06zm9.193 9.193a.75.75 0 011.06 0l1.061 1.06a.75.75 0 01-1.06 1.061l-1.061-1.06a.75.75 0 010-1.061zM16 8a.75.75 0 01-.75.75h-1.5a.75.75 0 010-1.5h1.5A.75.75 0 0116 8zM3 8a.75.75 0 01-.75.75H.75a.75.75 0 010-1.5h1.5A.75.75 0 013 8zm10.657-5.657a.75.75 0 010 1.061l-1.061 1.06a.75.75 0 11-1.06-1.06l1.06-1.06a.75.75 0 011.06 0zm-9.193 9.193a.75.75 0 010 1.06l-1.06 1.061a.75.75 0 11-1.061-1.06l1.06-1.061a.75.75 0 011.061 0z', 'moon': 'M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786zm1.616 1.945a7 7 0 01-7.678 7.678 5.5 5.5 0 107.678-7.678z', 'sync': 'M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z', 'home': 'M6.906.664a1.749 1.749 0 0 1 2.187 0l5.25 4.2c.415.332.657.835.657 1.367v7.019A1.75 1.75 0 0 1 13.25 15h-3.5a.75.75 0 0 1-.75-.75V9H7v5.25a.75.75 0 0 1-.75.75h-3.5A1.75 1.75 0 0 1 1 13.25V6.23c0-.531.242-1.034.657-1.366l5.25-4.2Zm1.25 1.171a.25.25 0 0 0-.312 0l-5.25 4.2a.25.25 0 0 0-.094.196v7.019c0 .138.112.25.25.25H5.5V8.25a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 .75.75v5.25h2.75a.25.25 0 0 0 .25-.25V6.23a.25.25 0 0 0-.094-.195Z', 'github': 'M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z', 'copy': 'M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z', 'check': 'M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z'};
+var utterancesLoad=0;
+
+let themeSettings={
+    "dark": ["dark","moon","#00f0ff","dark-blue"],
+    "light": ["light","sun","#ff5000","github-light"],
+    "auto": ["auto","sync","","preferred-color-scheme"]
+};
+function changeTheme(mode, icon, color, utheme){
+    document.documentElement.setAttribute("data-color-mode",mode);
+    document.getElementById("themeSwitch").setAttribute("d",value=IconList[icon]);
+    document.getElementById("themeSwitch").parentNode.style.color=color;
+    if(utterancesLoad==1){utterancesTheme(utheme);}
+}
+function modeSwitch(){
+    let currentMode=document.documentElement.getAttribute('data-color-mode');
+    let newMode = currentMode === "light" ? "dark" : currentMode === "dark" ? "auto" : "light";
+    localStorage.setItem("meek_theme", newMode);
+    if(themeSettings[newMode]){
+        changeTheme(...themeSettings[newMode]);
+    }
+}
+function utterancesTheme(theme){
+    const message={type:'set-theme',theme: theme};
+    const iframe=document.getElementsByClassName('utterances-frame')[0];
+    iframe.contentWindow.postMessage(message,'https://utteranc.es');
+}
+if(themeSettings[theme]){changeTheme(...themeSettings[theme]);}
+console.log("\n %c Gmeek last https://github.com/Meekdai/Gmeek \n","padding:5px 0;background:#02d81d;color:#fff");
+</script>
+
+<script>
+document.getElementById("pathHome").setAttribute("d",IconList["home"]);
+document.getElementById("pathIssue").setAttribute("d",IconList["github"]);
+
+
+
+function openComments(){
+    cm=document.getElementById("comments");
+    cmButton=document.getElementById("cmButton");
+    cmButton.disabled=true;
+    cmButton.innerHTML="loading";
+    span=document.createElement("span");
+    span.setAttribute("class","AnimatedEllipsis");
+    cmButton.appendChild(span);
+
+    script=document.createElement("script");
+    script.setAttribute("src","https://utteranc.es/client.js");
+    script.setAttribute("repo","yang-yang-NO-1/blog");
+    script.setAttribute("issue-term","title");
+    
+    if(localStorage.getItem("meek_theme")=="dark"){script.setAttribute("theme","dark-blue");}
+    else if(localStorage.getItem("meek_theme")=="light") {script.setAttribute("theme","github-light");}
+    else{script.setAttribute("theme","preferred-color-scheme");}
+    
+    script.setAttribute("crossorigin","anonymous");
+    script.setAttribute("async","");
+    cm.appendChild(script);
+
+    int=self.setInterval("iFrameLoading()",200);
+}
+
+function iFrameLoading(){
+    var utterances=document.getElementsByClassName('utterances');
+    if(utterances.length==1){
+        if(utterances[0].style.height!=""){
+            utterancesLoad=1;
+            int=window.clearInterval(int);
+            document.getElementById("cmButton").style.display="none";
+            console.log("utterances Load OK");
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const createClipboardHTML = (codeContent, additionalClasses = '') => `
+        <pre class="notranslate"><code class="notranslate">${codeContent}</code></pre>
+        <div class="clipboard-container position-absolute right-0 top-0 ${additionalClasses}">
+            <clipboard-copy class="ClipboardButton btn m-2 p-0" role="button" style="display: inherit;">
+                <svg height="16" width="16" class="octicon octicon-copy m-2"><path d="${IconList["copy"]}"></path></svg>
+                <svg height="16" width="16" class="octicon octicon-check color-fg-success m-2 d-none"><path d="${IconList["check"]}"></path></svg>
+            </clipboard-copy>
+            <div class="copy-feedback">Copied!</div>
+        </div>
+    `;
+
+    const handleCodeElements = (selector = '') => {
+        document.querySelectorAll(selector).forEach(codeElement => {
+            const codeContent = codeElement.innerHTML;
+            const newStructure = document.createElement('div');
+            newStructure.className = 'snippet-clipboard-content position-relative overflow-auto';
+            newStructure.innerHTML = createClipboardHTML(codeContent);
+
+            const parentElement = codeElement.parentElement;
+            if (selector.includes('highlight')) {
+                parentElement.insertBefore(newStructure, codeElement.nextSibling);
+                parentElement.removeChild(codeElement);
+            } else {
+                parentElement.parentElement.replaceChild(newStructure, parentElement);
+            }
+        });
+    };
+
+    handleCodeElements('pre.notranslate > code.notranslate');
+    handleCodeElements('div.highlight > pre.notranslate');
+
+    let currentFeedback = null;
+    document.querySelectorAll('clipboard-copy').forEach(copyButton => {
+        copyButton.addEventListener('click', () => {
+            const codeContent = copyButton.closest('.snippet-clipboard-content').innerText;
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = codeContent;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextArea);
+
+            const copyIcon = copyButton.querySelector('.octicon-copy');
+            const checkIcon = copyButton.querySelector('.octicon-check');
+            const copyFeedback = copyButton.nextElementSibling;
+
+            if (currentFeedback && currentFeedback !== copyFeedback) {currentFeedback.style.display = 'none';}
+            currentFeedback = copyFeedback;
+
+            copyIcon.classList.add('d-none');
+            checkIcon.classList.remove('d-none');
+            copyFeedback.style.display = 'block';
+            copyButton.style.borderColor = 'var(--color-success-fg)';
+
+            setTimeout(() => {
+                copyIcon.classList.remove('d-none');
+                checkIcon.classList.add('d-none');
+                copyFeedback.style.display = 'none';
+                copyButton.style.borderColor = '';
+            }, 2000);
+        });
+    });
+});
+
+</script>
+
+
+</html>
