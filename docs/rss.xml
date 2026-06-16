@@ -1,5 +1,18 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0"><channel><title>杨大爷的山头</title><link>https://yang-yang-NO-1.github.io/blog</link><description>好奇心救了猫</description><copyright>杨大爷的山头</copyright><docs>http://www.rssboard.org/rss-specification</docs><generator>python-feedgen</generator><image><url>https://github.githubassets.com/favicons/favicon.svg</url><title>avatar</title><link>https://yang-yang-NO-1.github.io/blog</link></image><lastBuildDate>Tue, 16 Jun 2026 13:04:14 +0000</lastBuildDate><managingEditor>杨大爷的山头</managingEditor><ttl>60</ttl><webMaster>杨大爷的山头</webMaster><item><title>Markdown 常用语法汇总表</title><link>https://yang-yang-NO-1.github.io/blog/post/Markdown%20-chang-yong-yu-fa-hui-zong-biao.html</link><description>
+<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0"><channel><title>杨大爷的山头</title><link>https://yang-yang-NO-1.github.io/blog</link><description>好奇心救了猫</description><copyright>杨大爷的山头</copyright><docs>http://www.rssboard.org/rss-specification</docs><generator>python-feedgen</generator><image><url>https://github.githubassets.com/favicons/favicon.svg</url><title>avatar</title><link>https://yang-yang-NO-1.github.io/blog</link></image><lastBuildDate>Tue, 16 Jun 2026 13:12:17 +0000</lastBuildDate><managingEditor>杨大爷的山头</managingEditor><ttl>60</ttl><webMaster>杨大爷的山头</webMaster><item><title>树莓派系统镜像备份、压缩、恢复与USB硬盘安全卸载</title><link>https://yang-yang-NO-1.github.io/blog/post/shu-mei-pai-xi-tong-jing-xiang-bei-fen-%E3%80%81-ya-suo-%E3%80%81-hui-fu-yu-USB-ying-pan-an-quan-xie-zai.html</link><description># 树莓派系统镜像备份、压缩、恢复与USB硬盘安全卸载
+
+这篇文章记录一下我在树莓派上做系统镜像备份的完整流程，包括：
+
+- 修改代理
+- 下载 `PiShrink`
+- 给脚本增加执行权限
+- 将树莓派系统盘备份到 USB 机械硬盘
+- 压缩裁剪镜像
+- 生成校验文件
+- 恢复镜像到新 SD 卡
+- 安全卸载 USB 机械硬盘
+
+这套方案适合已经把系统、服务、自启动、项目环境都配置好的场景。</description><guid isPermaLink="true">https://yang-yang-NO-1.github.io/blog/post/shu-mei-pai-xi-tong-jing-xiang-bei-fen-%E3%80%81-ya-suo-%E3%80%81-hui-fu-yu-USB-ying-pan-an-quan-xie-zai.html</guid><pubDate>Tue, 16 Jun 2026 13:11:37 +0000</pubDate></item><item><title>Markdown 常用语法汇总表</title><link>https://yang-yang-NO-1.github.io/blog/post/Markdown%20-chang-yong-yu-fa-hui-zong-biao.html</link><description>
 # Markdown 常用语法汇总表
 
 | 效果 | 语法写法 | 说明 |
