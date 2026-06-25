@@ -10,35 +10,13 @@
         let theme = localStorage.getItem("meek_theme") || "light";
         document.documentElement.setAttribute("data-color-mode", theme);
     </script>
-<meta name="description" content="# 树莓派系统镜像备份、压缩、恢复与USB硬盘安全卸载
+<meta name="description" content="# 树莓派系统镜像备份实录：压缩、恢复、校验与USB硬盘安全卸载
 
-这篇文章记录一下我在树莓派上做系统镜像备份的完整流程，包括：
-
-- 修改代理
-- 下载 `PiShrink`
-- 给脚本增加执行权限
-- 将树莓派系统盘备份到 USB 机械硬盘
-- 压缩裁剪镜像
-- 生成校验文件
-- 恢复镜像到新 SD 卡
-- 安全卸载 USB 机械硬盘
-
-这套方案适合已经把系统、服务、自启动、项目环境都配置好的场景。">
+最近把树莓派上的系统、服务、自启动和项目环境都调好了，就想着赶紧做一份完整镜像备份。">
 <meta property="og:title" content="树莓派系统镜像备份、压缩、恢复与USB硬盘安全卸载">
-<meta property="og:description" content="# 树莓派系统镜像备份、压缩、恢复与USB硬盘安全卸载
+<meta property="og:description" content="# 树莓派系统镜像备份实录：压缩、恢复、校验与USB硬盘安全卸载
 
-这篇文章记录一下我在树莓派上做系统镜像备份的完整流程，包括：
-
-- 修改代理
-- 下载 `PiShrink`
-- 给脚本增加执行权限
-- 将树莓派系统盘备份到 USB 机械硬盘
-- 压缩裁剪镜像
-- 生成校验文件
-- 恢复镜像到新 SD 卡
-- 安全卸载 USB 机械硬盘
-
-这套方案适合已经把系统、服务、自启动、项目环境都配置好的场景。">
+最近把树莓派上的系统、服务、自启动和项目环境都调好了，就想着赶紧做一份完整镜像备份。">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://yang-yang-NO-1.github.io/blog/post/shu-mei-pai-xi-tong-jing-xiang-bei-fen-%E3%80%81-ya-suo-%E3%80%81-hui-fu-yu-USB-ying-pan-an-quan-xie-zai.html">
 <meta property="og:image" content="https://github.githubassets.com/favicons/favicon.svg">
@@ -109,23 +87,327 @@ body{box-sizing: border-box;min-width: 200px;max-width: 900px;margin: 20px auto;
 </div>
 </div>
     <div id="content">
-<div class="markdown-body" id="postBody"><h1>树莓派系统镜像备份、压缩、恢复与USB硬盘安全卸载</h1>
-<p>这篇文章记录一下我在树莓派上做系统镜像备份的完整流程，包括：</p>
+<div class="markdown-body" id="postBody"><h1>树莓派系统镜像备份实录：压缩、恢复、校验与USB硬盘安全卸载</h1>
+<p>最近把树莓派上的系统、服务、自启动和项目环境都调好了，就想着赶紧做一份完整镜像备份。<br>
+这样以后不管是 SD 卡损坏、系统崩掉，还是想快速迁移到新卡，都能直接恢复，不用再从头折腾一遍。</p>
+<p>这篇就把整套流程完整记下来，内容包括：</p>
 <ul>
-<li>修改代理</li>
+<li>修改代理到 <code class="notranslate">192.168.0.195</code></li>
 <li>下载 <code class="notranslate">PiShrink</code></li>
-<li>给脚本增加执行权限</li>
-<li>将树莓派系统盘备份到 USB 机械硬盘</li>
-<li>压缩裁剪镜像</li>
-<li>生成校验文件</li>
+<li>给脚本加执行权限</li>
+<li>把系统盘备份到 USB 机械硬盘</li>
+<li>压缩和裁剪镜像</li>
+<li>生成 SHA256 校验文件</li>
 <li>恢复镜像到新 SD 卡</li>
 <li>安全卸载 USB 机械硬盘</li>
 </ul>
-<p>这套方案适合已经把系统、服务、自启动、项目环境都配置好的场景。备份完成后，后续如果系统损坏，直接恢复镜像即可。</p>
+<p>整篇偏实战记录，按步骤做就可以。</p>
 <hr>
-<h2>一、当前设备情况</h2>
-<p>根据 <code class="notranslate">lsblk</code> 结果：</p>
-<div class="highlight highlight-source-shell"><pre class="notranslate">lsblk</pre></div></div>
+<h2>当前环境</h2>
+<p>先看一下当前磁盘情况：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">lsblk</pre></div>
+<p>我这里对应关系是这样的：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">系统盘：/dev/mmcblk0
+机械硬盘分区：/dev/sda1
+机械硬盘挂载点：/media/pi/机械硬盘
+</code></pre>
+<p>也就是说，这次备份的思路非常简单：</p>
+<ul>
+<li>从 <code class="notranslate">/dev/mmcblk0</code> 读取整张系统卡</li>
+<li>把镜像文件保存到 <code class="notranslate">/media/pi/机械硬盘</code></li>
+</ul>
+<hr>
+<h2>一、先把代理改到 192.168.0.195</h2>
+<p>如果树莓派访问 GitHub 需要走局域网代理，可以先改一下代理地址。</p>
+<h3>临时设置当前终端代理</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate"><span class="pl-k">export</span> http_proxy=<span class="pl-s"><span class="pl-pds">"</span>http://192.168.0.195:7890<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> https_proxy=<span class="pl-s"><span class="pl-pds">"</span>http://192.168.0.195:7890<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> HTTP_PROXY=<span class="pl-s"><span class="pl-pds">"</span>http://192.168.0.195:7890<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> HTTPS_PROXY=<span class="pl-s"><span class="pl-pds">"</span>http://192.168.0.195:7890<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> all_proxy=<span class="pl-s"><span class="pl-pds">"</span>socks5://192.168.0.195:7890<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> ALL_PROXY=<span class="pl-s"><span class="pl-pds">"</span>socks5://192.168.0.195:7890<span class="pl-pds">"</span></span></pre></div>
+<p>检查是否生效：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">env <span class="pl-k">|</span> grep -i proxy</pre></div>
+<h3>如果想长期生效，写进 <code class="notranslate">~/.bashrc</code></h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate">cat <span class="pl-k">&gt;&gt;</span> <span class="pl-k">~</span>/.bashrc <span class="pl-s"><span class="pl-k">&lt;&lt;</span>'<span class="pl-k">EOF</span>'</span>
+<span class="pl-s">export http_proxy="http://192.168.0.195:7890"</span>
+<span class="pl-s">export https_proxy="http://192.168.0.195:7890"</span>
+<span class="pl-s">export HTTP_PROXY="http://192.168.0.195:7890"</span>
+<span class="pl-s">export HTTPS_PROXY="http://192.168.0.195:7890"</span>
+<span class="pl-s">export all_proxy="socks5://192.168.0.195:7890"</span>
+<span class="pl-s">export ALL_PROXY="socks5://192.168.0.195:7890"</span>
+<span class="pl-s"><span class="pl-k">EOF</span></span>
+
+<span class="pl-c1">source</span> <span class="pl-k">~</span>/.bashrc</pre></div>
+<h3>如果原来用的是 192.168.0.196，直接替换</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate">sed -i <span class="pl-s"><span class="pl-pds">'</span>s/192\.168\.0\.196/192.168.0.195/g<span class="pl-pds">'</span></span> <span class="pl-k">~</span>/.bashrc
+<span class="pl-c1">source</span> <span class="pl-k">~</span>/.bashrc</pre></div>
+<h3>不想用了就取消代理</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate"><span class="pl-c1">unset</span> http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY</pre></div>
+<hr>
+<h2>二、下载 PiShrink</h2>
+<p><code class="notranslate">PiShrink</code> 很适合做树莓派镜像瘦身。<br>
+它会把镜像里没用到的空间裁掉，然后还能顺手再压缩一遍，最后得到一个更适合长期保存的 <code class="notranslate">.img.gz</code> 文件。</p>
+<p>先进入临时目录：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate"><span class="pl-c1">cd</span> /tmp</pre></div>
+<p>下载脚本：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">wget https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh</pre></div>
+<p>如果不想走代理，也可以这样：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">wget --no-proxy https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh</pre></div>
+<p>下载完成后，加执行权限：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">chmod +x /tmp/pishrink.sh</pre></div>
+<p>或者当前目录下执行：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">chmod +x pishrink.sh</pre></div>
+<p>可以顺手确认一下文件是否真的在：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">ls -lh /tmp/pishrink.sh</pre></div>
+<hr>
+<h2>三、备份前先看看机械硬盘空间够不够</h2>
+<p>先检查挂载的 USB 机械硬盘：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">df -h <span class="pl-s"><span class="pl-pds">"</span>/media/pi/机械硬盘<span class="pl-pds">"</span></span></pre></div>
+<p>我这边系统盘是 <code class="notranslate">14.8G</code>，所以机械硬盘最好至少留出 <code class="notranslate">15G</code> 以上可用空间。<br>
+因为在压缩前，<code class="notranslate">dd</code> 生成的是完整整卡镜像，体积会比较大。</p>
+<hr>
+<h2>四、备份前顺手清理一下系统垃圾</h2>
+<p>不是必须，但建议做。<br>
+这样后面压缩出来的镜像往往会更小一些。</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">sudo apt clean
+sudo journalctl --vacuum-time=3d
+rm -rf <span class="pl-k">~</span>/.cache/<span class="pl-k">*</span></pre></div>
+<p>如果你系统里还有一些临时文件、旧日志、编译缓存，也可以提前手动删掉。</p>
+<hr>
+<h2>五、开始做整卡镜像备份</h2>
+<p>核心命令就是这一条：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">sudo dd if=/dev/mmcblk0 of=<span class="pl-s"><span class="pl-pds">"</span>/media/pi/机械硬盘/raspi-control-panel-final.img<span class="pl-pds">"</span></span> bs=4M status=progress conv=fsync</pre></div>
+<p>这几个参数的意思：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">if=/dev/mmcblk0   输入源，也就是当前树莓派系统盘
+of=...img         输出镜像文件到机械硬盘
+bs=4M             每次读写 4MB，效率更高
+status=progress   显示实时进度
+conv=fsync        确保数据真正写入磁盘
+</code></pre>
+<p>跑完以后，机械硬盘里会生成一个完整镜像：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">/media/pi/机械硬盘/raspi-control-panel-final.img
+</code></pre>
+<p>这个文件通常会接近原始 SD 卡容量，所以看到它很大是正常的。</p>
+<hr>
+<h2>六、用 PiShrink 裁剪并压缩镜像</h2>
+<p>整卡镜像虽然完整，但太占空间。<br>
+这时候就轮到 <code class="notranslate">PiShrink</code> 上场了。</p>
+<p>执行：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">sudo /tmp/pishrink.sh -z <span class="pl-s"><span class="pl-pds">"</span>/media/pi/机械硬盘/raspi-control-panel-final.img<span class="pl-pds">"</span></span></pre></div>
+<p>这里的 <code class="notranslate">-z</code> 参数表示：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">裁剪完成后自动再压缩成 .gz
+</code></pre>
+<p>最终一般会得到：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">/media/pi/机械硬盘/raspi-control-panel-final.img.gz
+</code></pre>
+<p>这个文件才是最适合长期保存的版本。</p>
+<hr>
+<h2>七、再补一个 SHA256 校验文件</h2>
+<p>镜像这种东西，最怕以后拷来拷去出了损坏但自己不知道。<br>
+所以我建议顺手再生成一个校验文件。</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">sha256sum <span class="pl-s"><span class="pl-pds">"</span>/media/pi/机械硬盘/raspi-control-panel-final.img.gz<span class="pl-pds">"</span></span> <span class="pl-k">&gt;</span> <span class="pl-s"><span class="pl-pds">"</span>/media/pi/机械硬盘/raspi-control-panel-final.img.gz.sha256<span class="pl-pds">"</span></span></pre></div>
+<p>以后要验证镜像完整性，就执行：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate"><span class="pl-c1">cd</span> <span class="pl-s"><span class="pl-pds">"</span>/media/pi/机械硬盘<span class="pl-pds">"</span></span>
+sha256sum -c raspi-control-panel-final.img.gz.sha256</pre></div>
+<p>如果输出：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">raspi-control-panel-final.img.gz: OK
+</code></pre>
+<p>那就说明文件没坏。</p>
+<hr>
+<h2>八、最后建议保留哪些文件</h2>
+<p>备份完成后，我建议至少保留这两个：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">/media/pi/机械硬盘/raspi-control-panel-final.img.gz
+/media/pi/机械硬盘/raspi-control-panel-final.img.gz.sha256
+</code></pre>
+<p>一个是镜像本体，一个是校验文件。<br>
+这样以后恢复前先校验一下，心里会踏实很多。</p>
+<hr>
+<h2>九、整套备份流程命令放一起</h2>
+<p>为了以后自己查方便，也把完整命令放一遍：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate"><span class="pl-k">export</span> http_proxy=<span class="pl-s"><span class="pl-pds">"</span>http://192.168.0.195:7890<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> https_proxy=<span class="pl-s"><span class="pl-pds">"</span>http://192.168.0.195:7890<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> HTTP_PROXY=<span class="pl-s"><span class="pl-pds">"</span>http://192.168.0.195:7890<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> HTTPS_PROXY=<span class="pl-s"><span class="pl-pds">"</span>http://192.168.0.195:7890<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> all_proxy=<span class="pl-s"><span class="pl-pds">"</span>socks5://192.168.0.195:7890<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> ALL_PROXY=<span class="pl-s"><span class="pl-pds">"</span>socks5://192.168.0.195:7890<span class="pl-pds">"</span></span>
+
+<span class="pl-c1">cd</span> /tmp
+wget https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh
+chmod +x /tmp/pishrink.sh
+
+df -h <span class="pl-s"><span class="pl-pds">"</span>/media/pi/机械硬盘<span class="pl-pds">"</span></span>
+
+sudo apt clean
+sudo journalctl --vacuum-time=3d
+rm -rf <span class="pl-k">~</span>/.cache/<span class="pl-k">*</span>
+
+sudo dd if=/dev/mmcblk0 of=<span class="pl-s"><span class="pl-pds">"</span>/media/pi/机械硬盘/raspi-control-panel-final.img<span class="pl-pds">"</span></span> bs=4M status=progress conv=fsync
+
+sudo /tmp/pishrink.sh -z <span class="pl-s"><span class="pl-pds">"</span>/media/pi/机械硬盘/raspi-control-panel-final.img<span class="pl-pds">"</span></span>
+
+sha256sum <span class="pl-s"><span class="pl-pds">"</span>/media/pi/机械硬盘/raspi-control-panel-final.img.gz<span class="pl-pds">"</span></span> <span class="pl-k">&gt;</span> <span class="pl-s"><span class="pl-pds">"</span>/media/pi/机械硬盘/raspi-control-panel-final.img.gz.sha256<span class="pl-pds">"</span></span></pre></div>
+<hr>
+<h2>十、以后怎么恢复镜像</h2>
+<p>恢复前需要准备：</p>
+<ul>
+<li>一张新的 SD 卡</li>
+<li>镜像文件 <code class="notranslate">raspi-control-panel-final.img.gz</code></li>
+<li>校验文件 <code class="notranslate">raspi-control-panel-final.img.gz.sha256</code></li>
+</ul>
+<p>建议目标卡容量不要小于原系统卡容量，稳妥一点就上 <code class="notranslate">16GB</code> 或更大。</p>
+<h3>1）先校验镜像完整性</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate"><span class="pl-c1">cd</span> <span class="pl-s"><span class="pl-pds">"</span>/media/pi/机械硬盘<span class="pl-pds">"</span></span>
+sha256sum -c raspi-control-panel-final.img.gz.sha256</pre></div>
+<p>如果输出 <code class="notranslate">OK</code>，说明镜像正常。</p>
+<h3>2）解压镜像</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate">gunzip -k raspi-control-panel-final.img.gz</pre></div>
+<p>这里的 <code class="notranslate">-k</code> 表示保留原来的 <code class="notranslate">.gz</code> 压缩文件。</p>
+<p>解压后会得到：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">raspi-control-panel-final.img
+</code></pre>
+<h3>3）插入目标 SD 卡，确认设备名</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate">lsblk</pre></div>
+<p>这一步一定要仔细看。<br>
+假设目标 SD 卡是：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">/dev/sda
+</code></pre>
+<p>千万别把目标写成系统盘或者机械硬盘。</p>
+<h3>4）开始写入镜像</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate">sudo dd if=raspi-control-panel-final.img of=/dev/sda bs=4M status=progress conv=fsync
+sync</pre></div>
+<p>写完以后，就可以把卡插回树莓派启动了。</p>
+<hr>
+<h2>十一、恢复后是否还要手动 resize</h2>
+<p>通常不需要。<br>
+<code class="notranslate">PiShrink</code> 处理过的镜像，一般第一次启动时就会自动扩展根分区。</p>
+<p>启动后可以先检查一下：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">df -h</pre></div>
+<p>如果发现根分区 <code class="notranslate">/</code> 没有自动扩展，再手动执行：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">sudo raspi-config --expand-rootfs
+sudo reboot</pre></div>
+<hr>
+<h2>十二、恢复后检查服务是不是正常</h2>
+<p>树莓派启动后，我一般会先检查服务状态：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">systemctl status raspi-control-panel.service --no-pager</pre></div>
+<p>如果正常，应该能看到：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">active (running)
+</code></pre>
+<p>也可以继续看进程：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">ps -ef <span class="pl-k">|</span> grep raspi-control-panel <span class="pl-k">|</span> grep -v grep</pre></div>
+<p>如果你想更严谨一点，也可以比较程序文件和配置文件：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">cmp <span class="pl-k">~</span>/raspi-control-panel/raspi-control-panel /usr/local/bin/raspi-control-panel <span class="pl-k">&amp;&amp;</span> <span class="pl-c1">echo</span> <span class="pl-s"><span class="pl-pds">"</span>program same<span class="pl-pds">"</span></span>
+cmp <span class="pl-k">~</span>/raspi-control-panel/config/panel.conf /etc/raspi-control-panel.conf <span class="pl-k">&amp;&amp;</span> <span class="pl-c1">echo</span> <span class="pl-s"><span class="pl-pds">"</span>config same<span class="pl-pds">"</span></span></pre></div>
+<hr>
+<h2>十三、如果恢复后服务没起来</h2>
+<p>那就直接手动重启：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">sudo systemctl restart raspi-control-panel.service</pre></div>
+<p>然后再看状态：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">systemctl status raspi-control-panel.service --no-pager</pre></div>
+<p>想进一步查问题，就看日志：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">journalctl -u raspi-control-panel.service -n 100 --no-pager</pre></div>
+<hr>
+<h2>十四、Windows 下也能恢复</h2>
+<p>如果不想在 Linux 下操作，Windows 也可以恢复镜像。</p>
+<p>常见工具有：</p>
+<ul>
+<li>Raspberry Pi Imager</li>
+<li>balenaEtcher</li>
+<li>Win32 Disk Imager</li>
+</ul>
+<p>大概流程就是：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">1. 先把 .img.gz 解压成 .img
+2. 插入新的 SD 卡
+3. 在烧录工具里选择 .img 文件
+4. 写入 SD 卡
+5. 写入完成后插回树莓派
+</code></pre>
+<hr>
+<h2>十五、备份完成后，别忘了安全卸载 USB 机械硬盘</h2>
+<p>镜像文件通常很大，所以拔硬盘之前一定别偷懒，最好走一遍安全卸载流程。</p>
+<p>假设挂载点是：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">/media/pi/机械硬盘
+</code></pre>
+<p>设备分区是：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">/dev/sda1
+</code></pre>
+<h3>1）先写入缓存</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate">sync</pre></div>
+<h3>2）如果当前就在硬盘目录下，先退出来</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate"><span class="pl-c1">cd</span> <span class="pl-k">~</span></pre></div>
+<h3>3）卸载硬盘</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate">sudo umount <span class="pl-s"><span class="pl-pds">"</span>/media/pi/机械硬盘<span class="pl-pds">"</span></span></pre></div>
+<p>或者：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">sudo umount /dev/sda1</pre></div>
+<h3>4）确认是否已经卸载成功</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate">lsblk</pre></div>
+<p>如果 <code class="notranslate">sda1</code> 后面已经没有挂载路径，就说明可以安全拔掉了。</p>
+<p>成功示例大概像这样：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">sda           8:0    0 465.8G  0 disk
+└─sda1        8:1    0 465.8G  0 part
+</code></pre>
+<h3>5）如果提示 <code class="notranslate">target is busy</code></h3>
+<p>那说明还有进程占着这个目录。</p>
+<p>可以先试一遍：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate"><span class="pl-c1">cd</span> <span class="pl-k">~</span>
+sync
+sudo umount <span class="pl-s"><span class="pl-pds">"</span>/media/pi/机械硬盘<span class="pl-pds">"</span></span></pre></div>
+<p>如果还不行，再查占用：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">sudo lsof +f -- <span class="pl-s"><span class="pl-pds">"</span>/media/pi/机械硬盘<span class="pl-pds">"</span></span></pre></div>
+<p>或者：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">sudo fuser -vm <span class="pl-s"><span class="pl-pds">"</span>/media/pi/机械硬盘<span class="pl-pds">"</span></span></pre></div>
+<p>确认不是备份、压缩或校验过程还没结束，再把相关进程处理掉。</p>
+<hr>
+<h2>十六、常用命令总汇总</h2>
+<h3>设置代理</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate"><span class="pl-k">export</span> http_proxy=<span class="pl-s"><span class="pl-pds">"</span>http://192.168.0.195:7890<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> https_proxy=<span class="pl-s"><span class="pl-pds">"</span>http://192.168.0.195:7890<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> HTTP_PROXY=<span class="pl-s"><span class="pl-pds">"</span>http://192.168.0.195:7890<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> HTTPS_PROXY=<span class="pl-s"><span class="pl-pds">"</span>http://192.168.0.195:7890<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> all_proxy=<span class="pl-s"><span class="pl-pds">"</span>socks5://192.168.0.195:7890<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> ALL_PROXY=<span class="pl-s"><span class="pl-pds">"</span>socks5://192.168.0.195:7890<span class="pl-pds">"</span></span></pre></div>
+<h3>下载 PiShrink 并授权</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate"><span class="pl-c1">cd</span> /tmp
+wget https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh
+chmod +x /tmp/pishrink.sh</pre></div>
+<h3>校验镜像</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate"><span class="pl-c1">cd</span> <span class="pl-s"><span class="pl-pds">"</span>/media/pi/机械硬盘<span class="pl-pds">"</span></span>
+sha256sum -c raspi-control-panel-final.img.gz.sha256</pre></div>
+<h3>解压镜像</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate">gunzip -k raspi-control-panel-final.img.gz</pre></div>
+<h3>查看设备</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate">lsblk</pre></div>
+<h3>写入镜像</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate">sudo dd if=raspi-control-panel-final.img of=/dev/sdX bs=4M status=progress conv=fsync
+sync</pre></div>
+<p>其中 <code class="notranslate">/dev/sdX</code> 要替换成真实目标设备。</p>
+<h3>查看服务状态</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate">systemctl status raspi-control-panel.service --no-pager</pre></div>
+<hr>
+<h2>十七、最后提醒</h2>
+<p><code class="notranslate">dd</code> 命令非常强，但也非常“直”。<br>
+你一旦把 <code class="notranslate">of=</code> 写错，它不会提醒你“你是不是选错盘了”，它会直接开写。</p>
+<p>所以每次恢复前，我都建议先再看一眼：</p>
+<div class="highlight highlight-source-shell"><pre class="notranslate">lsblk</pre></div>
+<p>确认目标设备到底是谁，再执行写入命令。</p>
+<hr>
+<h2>结语</h2>
+<p>这套流程总结下来，其实就四步：</p>
+<ol>
+<li><code class="notranslate">dd</code> 做整卡备份</li>
+<li><code class="notranslate">PiShrink</code> 裁剪压缩</li>
+<li><code class="notranslate">sha256sum</code> 做校验</li>
+<li>需要时再写回 SD 卡恢复</li>
+</ol>
+<p>优点很明显：</p>
+<ul>
+<li>备份完整</li>
+<li>恢复直接</li>
+<li>镜像体积更小</li>
+<li>适合长期保存</li>
+</ul>
+<p>如果你的树莓派系统已经调试到一个稳定状态，真的很建议尽早做一份。<br>
+等系统出问题之后再想起来备份，通常就已经晚了。</p></div>
 <div style="font-size:small;margin-top:8px;float:right;"></div>
 
 <button class="btn btn-block" type="button" onclick="openComments()" id="cmButton">评论</button>
