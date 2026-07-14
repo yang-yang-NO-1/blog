@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html data-color-mode="light" data-dark-theme="dark" data-light-theme="light" lang="zh-CN">
+<head>
+    <meta content="text/html; charset=utf-8" http-equiv="content-type" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <link href='https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/Primer/21.0.7/primer.css' rel='stylesheet' />
+    
+    <link rel="icon" href="https://github.githubassets.com/favicons/favicon.svg"><script>
+        let theme = localStorage.getItem("meek_theme") || "light";
+        document.documentElement.setAttribute("data-color-mode", theme);
+    </script>
+<meta name="description" content="在使用 ESP32-S3 画自制板时，GPIO 不能只看“能不能配置成普通 IO”。">
+<meta property="og:title" content="ESP32-S3 硬件设计 GPIO 避坑指南">
+<meta property="og:description" content="在使用 ESP32-S3 画自制板时，GPIO 不能只看“能不能配置成普通 IO”。">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://yang-yang-NO-1.github.io/blog/post/ESP32-S3%20-ying-jian-she-ji-%20GPIO%20-bi-keng-zhi-nan.html">
+<meta property="og:image" content="https://github.githubassets.com/favicons/favicon.svg">
+<title>ESP32-S3 硬件设计 GPIO 避坑指南</title>
+
+
+
+</head>
+<style>
+body{box-sizing: border-box;min-width: 200px;max-width: 900px;margin: 20px auto;padding: 45px;font-size: 16px;font-family: sans-serif;line-height: 1.25;}
+#header{display:flex;padding-bottom:8px;border-bottom: 1px solid var(--borderColor-muted, var(--color-border-muted));margin-bottom: 16px;}
+#footer {margin-top:64px; text-align: center;font-size: small;}
+
+</style>
+
+<style>
+.postTitle{margin: auto 0;font-size:40px;font-weight:bold;}
+.title-right{display:flex;margin:auto 0 0 auto;}
+.title-right .circle{padding: 14px 16px;margin-right:8px;}
+#postBody{border-bottom: 1px solid var(--color-border-default);padding-bottom:36px;}
+#postBody hr{height:2px;}
+#cmButton{height:48px;margin-top:48px;}
+#comments{margin-top:64px;}
+.g-emoji{font-size:24px;}
+@media (max-width: 600px) {
+    body {padding: 8px;}
+    .postTitle{font-size:24px;}
+}
+
+</style>
+
+
+
+
+<body>
+    <div id="header">
+<h1 class="postTitle">ESP32-S3 硬件设计 GPIO 避坑指南</h1>
+<div class="title-right">
+    <a href="https://yang-yang-NO-1.github.io/blog" id="buttonHome" class="btn btn-invisible circle" title="首页">
+        <svg class="octicon" width="16" height="16">
+            <path id="pathHome" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+    
+    <a href="https://github.com/yang-yang-NO-1/blog/issues/6" target="_blank" class="btn btn-invisible circle" title="Issue">
+        <svg class="octicon" width="16" height="16">
+            <path id="pathIssue" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+    
+
+    <a class="btn btn-invisible circle" onclick="modeSwitch();" title="切换主题">
+        <svg class="octicon" width="16" height="16" >
+            <path id="themeSwitch" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+
+</div>
+</div>
+    <div id="content">
+<div class="markdown-body" id="postBody"><p>在使用 ESP32-S3 画自制板时，GPIO 不能只看“能不能配置成普通 IO”。有些引脚虽然软件上可以 <code class="notranslate">pinMode()</code>，但它们在上电启动、Flash/PSRAM、USB、JTAG、UART 下载等阶段有特殊作用。</p>
+<p>如果把这些引脚拿去做 <code class="notranslate">LCD_CS</code>、<code class="notranslate">LCD_RESET</code>、背光控制、继电器、MOS 使能、I2C 上拉线等关键功能，就容易出现：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">程序正常运行，但屏幕白屏
+串口异常
+无法下载
+上电不稳定
+反复复位
+外设偶发失效
+</code></pre>
+<p>本文总结 ESP32-S3 画板时需要避开的特殊 GPIO，并给出推荐用法。</p>
+<hr>
+<h2>1. 先记住一个总原则</h2>
+<p>ESP32-S3 的 GPIO 并不是从 <code class="notranslate">GPIO0 ~ GPIO48</code> 全部连续可用。</p>
+<p>ESP32-S3 常见可用 GPIO 范围为：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">GPIO0 ~ GPIO21
+GPIO26 ~ GPIO48
+</code></pre>
+<p>也就是说：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">GPIO22 ~ GPIO25 不存在 / 不应使用
+</code></pre>
+<p>ESP32-S3 通过 GPIO Matrix 可以把很多外设信号映射到不同 GPIO，但这不代表每个 GPIO 都适合做关键硬件控制脚。</p>
+<hr>
+<h2>2. 强烈不建议用于关键外设的 GPIO</h2>
+<p>这些 GPIO 最容易踩坑：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">GPIO0
+GPIO3
+GPIO45
+GPIO46
+</code></pre>
+<p>它们是 ESP32-S3 的 Strapping Pins，也就是启动配置采样脚。芯片上电或复位时，会读取这些引脚的电平，用来决定启动模式、Flash 电压等关键行为。</p>
+<h3>避免用途</h3>
+<p>不要把这些脚用于：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">LCD_CS
+LCD_RESET
+LCD_RD
+LCD_BLK / 背光控制
+电源使能
+MOS Gate
+继电器控制
+蜂鸣器
+I2C SDA / SCL
+外设片选 CS
+外设复位 RESET
+外部强上拉 / 强下拉网络
+</code></pre>
+<h3>建议用途</h3>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th align="right">GPIO</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="right">GPIO0</td>
+<td>只做 BOOT 按键，默认 10k 上拉到 3.3V，按键到 GND</td>
+</tr>
+<tr>
+<td align="right">GPIO3</td>
+<td>尽量不用；如果必须用，只接高阻输入，不接关键控制</td>
+</tr>
+<tr>
+<td align="right">GPIO45</td>
+<td>尽量不用；不要做背光、CS、RESET、MOS 控制</td>
+</tr>
+<tr>
+<td align="right">GPIO46</td>
+<td>尽量不用；不要做 LCD_CS、RESET、片选等关键输出</td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<hr>
+<h2>3. Flash / PSRAM 相关 GPIO</h2>
+<p>这些 GPIO 通常连接到模组内部的 Flash / PSRAM：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">GPIO26 ~ GPIO32
+</code></pre>
+<p>如果使用 Octal Flash 或 Octal PSRAM，下面这些也会被内部 Flash / PSRAM 占用：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">GPIO33 ~ GPIO37
+</code></pre>
+<p>对于常见的 ESP32-S3-N8R8、ESP32-S3-N16R8 这类带 OPI PSRAM 的模组，这一组引脚默认不要当普通 GPIO 用。</p>
+<h3>避免用途</h3>
+<pre lang="text" class="notranslate"><code class="notranslate">GPIO26 ~ GPIO37 不建议外接任何普通外设
+</code></pre>
+<p>不要拿来接：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">LCD 数据线
+I2C
+SPI
+按键
+LED
+继电器
+背光
+外设中断
+</code></pre>
+<p>否则可能导致：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">无法启动
+PSRAM 初始化失败
+Flash 读写异常
+程序随机崩溃
+烧录后不运行
+</code></pre>
+<hr>
+<h2>4. USB 相关 GPIO</h2>
+<p>ESP32-S3 支持原生 USB CDC / USB Serial-JTAG。常用引脚是：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">GPIO19 = USB D-
+GPIO20 = USB D+
+</code></pre>
+<p>如果你想保留 ESP32-S3 原生 USB 下载、调试、CDC 串口，那么：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">GPIO19 / GPIO20 不要再接其他外设
+</code></pre>
+<h3>推荐设计</h3>
+<pre lang="text" class="notranslate"><code class="notranslate">GPIO19 -&gt; USB D-
+GPIO20 -&gt; USB D+
+</code></pre>
+<p>同时 USB-C 作为设备端时，CC1 / CC2 要有下拉电阻：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">CC1 -&gt; 5.1k -&gt; GND
+CC2 -&gt; 5.1k -&gt; GND
+</code></pre>
+<p>如果同时设计 CH340 和原生 USB CDC，要注意两路 USB 的 5V 不要直接硬并联，避免反灌。</p>
+<hr>
+<h2>5. UART0 / CH340 相关 GPIO</h2>
+<p>ESP32-S3 默认 UART0 常用：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">GPIO43 = U0TXD
+GPIO44 = U0RXD
+</code></pre>
+<p>如果板子上有 CH340 / CP2102 / USB-TTL，用于传统串口下载和日志输出，建议保留：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">CH340_TXD -&gt; ESP32_RXD0 / GPIO44
+CH340_RXD -&gt; ESP32_TXD0 / GPIO43
+</code></pre>
+<p>不要让 GPIO43 / GPIO44 再接其他大负载。</p>
+<h3>自动下载电路注意</h3>
+<p>CH340 的 DTR / RTS 自动下载电路会控制：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">EN
+GPIO0
+</code></pre>
+<p>如果三极管方向、DTR/RTS 逻辑接错，会出现：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">打开串口就复位
+进入下载模式
+串口打不开
+设备管理器 COM 口异常
+</code></pre>
+<p>建议自动下载电路预留电阻，方便断开调试。</p>
+<hr>
+<h2>6. JTAG 相关 GPIO</h2>
+<p>ESP32-S3 还有一组 JTAG 相关引脚：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">GPIO39
+GPIO40
+GPIO41
+GPIO42
+</code></pre>
+<p>如果不使用外部 JTAG，这些脚可以作为普通 GPIO 使用。但如果后续需要 JTAG 调试，就不要占用它们。</p>
+<h3>建议</h3>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th align="right">GPIO</th>
+<th>可以使用吗</th>
+<th>注意</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="right">GPIO39</td>
+<td>可以</td>
+<td>会占用 JTAG 功能</td>
+</tr>
+<tr>
+<td align="right">GPIO40</td>
+<td>可以</td>
+<td>会占用 JTAG 功能</td>
+</tr>
+<tr>
+<td align="right">GPIO41</td>
+<td>可以</td>
+<td>会占用 JTAG 功能</td>
+</tr>
+<tr>
+<td align="right">GPIO42</td>
+<td>可以</td>
+<td>会占用 JTAG 功能</td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<p>如果项目不需要 JTAG，比如普通量产设备，这组可以用作 I2C、按键、低速控制线等。</p>
+<hr>
+<h2>7. 推荐优先使用的普通 GPIO</h2>
+<p>如果没有被你的外设占用，优先选择这些 GPIO 做普通控制：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">GPIO1
+GPIO2
+GPIO4 ~ GPIO18
+GPIO21
+GPIO38
+GPIO47
+GPIO48
+</code></pre>
+<p>但是仍然要结合具体功能判断：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">高速 LCD 并口：优先选连续、走线短、旁边有地参考的 GPIO
+I2C：任意普通 GPIO 可用，但必须有 4.7k 上拉
+PWM 背光：选普通 GPIO，不要用 Strapping Pin
+RESET / CS / EN：必须选上电状态可控、没有启动副作用的 GPIO
+</code></pre>
+<hr>
+<h2>8. LCD 屏幕设计重点避坑</h2>
+<p>如果使用 ILI9488 / ST7796 / ILI9341 等 8080 并口屏，LCD 控制线非常关键：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">LCD_CS
+LCD_RD
+LCD_WR
+LCD_RS / DC
+LCD_RESET
+LCD_BLK
+D0 ~ D15
+</code></pre>
+<h3>8.1 LCD_CS 推荐固定接地</h3>
+<p>如果系统里只有一块 LCD，不需要共享总线，最稳方案是：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">LCD_CS -&gt; GND
+</code></pre>
+<p>或者预留 0R 电阻：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">LCD_CS -- 0R -- GND
+LCD_CS -- 预留 0R -- ESP32 GPIO
+</code></pre>
+<p>默认焊接到 GND。</p>
+<p>这样可以避免 LCD_CS 上电悬空、被特殊 GPIO 影响、初始化阶段没有选中屏幕等问题。</p>
+<hr>
+<h3>8.2 LCD_RD 推荐固定拉高</h3>
+<p>如果不读取 LCD ID 或显存，LCD_RD 没必要接 ESP32。</p>
+<p>推荐：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">LCD_RD -&gt; 3.3V
+</code></pre>
+<p>或者：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">LCD_RD -&gt; 10k -&gt; 3.3V
+</code></pre>
+<p>如果 LCD_RD 被拉低或悬空，屏幕可能进入读模式，导致写命令失败，典型表现就是：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">背光亮
+程序正常运行
+fillScreen 无效
+屏幕一直白屏
+</code></pre>
+<hr>
+<h3>8.3 LCD_RESET 不建议悬空</h3>
+<p>推荐：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">LCD_RESET -&gt; 10k -&gt; 3.3V
+LCD_RESET -&gt; 0.1uF -&gt; GND
+</code></pre>
+<p>如果需要软件控制：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">ESP32 GPIO -&gt; 100R ~ 1k -&gt; LCD_RESET
+LCD_RESET -&gt; 10k -&gt; 3.3V
+LCD_RESET -&gt; 0.1uF -&gt; GND
+</code></pre>
+<p>不要把 LCD_RESET 直接硬接到 ESP32 的 EN，除非明确知道复位时序和负载不会互相影响。</p>
+<hr>
+<h3>8.4 背光 BLK 不要用 GPIO45 / GPIO46</h3>
+<p>背光控制建议使用普通 GPIO。</p>
+<p>推荐结构：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">ESP32 GPIO -&gt; 100R / 1k -&gt; MOS Gate
+MOS Gate -&gt; 100k -&gt; GND
+MOS 控制背光电流
+</code></pre>
+<p>不要用 GPIO45 / GPIO46 控制背光。</p>
+<p>原因是 GPIO45 / GPIO46 属于启动相关脚，上电阶段的外部电路可能影响启动或导致电平异常。</p>
+<hr>
+<h2>9. I2C 设计避坑</h2>
+<p>ESP32-S3 的 I2C 可以映射到很多普通 GPIO，但硬件上必须注意：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">SDA -&gt; 4.7k -&gt; 3.3V
+SCL -&gt; 4.7k -&gt; 3.3V
+</code></pre>
+<p>如果挂多个 I2C 设备，比如触摸芯片、PCF8574、传感器，要注意：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">所有设备必须共地
+地址不能冲突
+SDA/SCL 空闲电平应接近 3.3V
+不要让某个设备掉电后反向拖低 SDA/SCL
+线长较长时降低 I2C 频率到 100kHz
+</code></pre>
+<p>I2C 异常常见表现：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">程序卡在 I2C scan
+触摸初始化失败
+PCF8574 扫出一堆假地址
+SDA/SCL 只有 1.xV 或 2.xV
+</code></pre>
+<hr>
+<h2>10. EN / BOOT 设计建议</h2>
+<h3>EN 推荐电路</h3>
+<pre lang="text" class="notranslate"><code class="notranslate">3.3V
+ |
+10k
+ |
+EN
+ |
+0.1uF ~ 1uF
+ |
+GND
+</code></pre>
+<p>复位按键：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">EN -&gt; 按键 -&gt; GND
+</code></pre>
+<p>EN 正常运行时应稳定在：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">3.3V 左右
+</code></pre>
+<p>如果 EN 是 0.4V、1.xV 或跳动，ESP32 会无法启动或反复复位。</p>
+<hr>
+<h3>BOOT / GPIO0 推荐电路</h3>
+<pre lang="text" class="notranslate"><code class="notranslate">GPIO0 -&gt; 10k -&gt; 3.3V
+GPIO0 -&gt; BOOT 按键 -&gt; GND
+</code></pre>
+<p>不要把 GPIO0 接到 LCD、继电器、传感器输出、MOS 等外设上。</p>
+<p>GPIO0 被拉低时，ESP32-S3 可能进入下载模式，导致应用程序不启动。</p>
+<hr>
+<h2>11. 电源与 USB 供电避坑</h2>
+<p>如果板子同时有：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">USB-C 原生 CDC
+CH340 USB
+外部 5V 电源
+</code></pre>
+<p>必须考虑 5V 反灌。</p>
+<p>不要简单把多路 5V 全部硬并联。建议使用：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">肖特基二极管
+理想二极管
+电源选择跳帽
+保险丝 / PTC
+0R 电阻选择
+</code></pre>
+<p>5V 输入端建议加：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">100uF ~ 470uF 电解/钽电容
+0.1uF 陶瓷电容
+</code></pre>
+<p>3.3V 稳压建议：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">输出能力 &gt;= 800mA，推荐 1A 以上
+ESP32 模组旁边放 10uF + 0.1uF
+屏幕、触摸、PCF 等外设旁边各放 0.1uF
+</code></pre>
+<hr>
+<h2>12. ESP32-S3 GPIO 风险分级表</h2>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th>等级</th>
+<th>GPIO</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>禁止普通使用</td>
+<td>GPIO26 ~ GPIO37</td>
+<td>Flash / PSRAM 相关，不要接外设</td>
+</tr>
+<tr>
+<td>强烈不建议</td>
+<td>GPIO0 / GPIO3 / GPIO45 / GPIO46</td>
+<td>Strapping Pins，不要接关键控制</td>
+</tr>
+<tr>
+<td>保留 USB</td>
+<td>GPIO19 / GPIO20</td>
+<td>原生 USB CDC / USB Serial-JTAG</td>
+</tr>
+<tr>
+<td>保留 UART0</td>
+<td>GPIO43 / GPIO44</td>
+<td>CH340 / 串口日志 / 下载</td>
+</tr>
+<tr>
+<td>谨慎使用</td>
+<td>GPIO39 ~ GPIO42</td>
+<td>JTAG 相关，不用 JTAG 时可用</td>
+</tr>
+<tr>
+<td>优先普通 IO</td>
+<td>GPIO1 / GPIO2 / GPIO4~18 / GPIO21 / GPIO38 / GPIO47 / GPIO48</td>
+<td>适合普通外设，仍需结合实际功能</td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<hr>
+<h2>13. 推荐硬件设计清单</h2>
+<p>画 ESP32-S3 自制板时，可以直接按下面原则检查：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">[ ] GPIO0 只做 BOOT，不接其他外设
+[ ] GPIO45 / GPIO46 不做关键控制脚
+[ ] GPIO26~37 不接外设，留给 Flash / PSRAM
+[ ] GPIO19 / GPIO20 留给原生 USB
+[ ] GPIO43 / GPIO44 留给 CH340 或测试串口
+[ ] LCD_CS 默认接 GND，或通过 0R 选择
+[ ] LCD_RD 默认接 3.3V，或通过 10k 上拉
+[ ] LCD_RESET 有 10k 上拉和 0.1uF 电容
+[ ] 背光控制用普通 GPIO + MOS，不用 Strapping Pin
+[ ] I2C SDA/SCL 有 4.7k 上拉
+[ ] EN 有 10k 上拉和 0.1uF~1uF 电容
+[ ] USB-C CC1/CC2 有 5.1k 下拉
+[ ] 多路 5V 供电之间有隔离或选择方案
+[ ] LCD、触摸、I2C、UART、USB 都预留测试点
+</code></pre>
+<hr>
+<h2>14. 针对 LCD 白屏的快速排查法</h2>
+<p>如果遇到：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">串口正常
+程序 alive 正常
+背光亮
+屏幕一直白屏
+fillScreen 无效
+</code></pre>
+<p>优先检查：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">1. LCD_CS 是否真正为低电平
+2. LCD_RD 是否真正为高电平
+3. LCD_RESET 是否释放到 3.3V
+4. LCD_WR 是否有写脉冲
+5. LCD_RS/DC 是否能翻转
+6. D0~D15 是否错线、虚焊、短路
+7. LCD 接口模式 IM0~IM3 是否为 8080 并口模式
+8. LovyanGFX 的 pin 配置是否与原理图一致
+9. freq_write 是否过高，必要时降到 2MHz / 5MHz 测试
+10. 换屏交叉验证
+</code></pre>
+<p>实际经验中，如果 LCD_CS 或 LCD_RD 没有默认固定电平，即使程序和电源都正常，也可能表现为白屏。</p>
+<hr>
+<h2>15. 推荐的 LCD 连接策略</h2>
+<p>对于单 LCD 设备，推荐这样设计：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">LCD_CS    -&gt; GND
+LCD_RD    -&gt; 3.3V
+LCD_RESET -&gt; 10k 上拉 + 0.1uF 到 GND，可选 GPIO 控制
+LCD_BLK   -&gt; 普通 GPIO 控制 MOS
+LCD_WR    -&gt; 普通 GPIO
+LCD_RS/DC -&gt; 普通 GPIO
+D0~D15    -&gt; 普通 GPIO，避免 Flash/PSRAM/Strapping/USB/UART0
+</code></pre>
+<p>这样能大幅降低屏幕白屏、初始化失败和启动异常的概率。</p>
+<hr>
+<h2>16. 总结</h2>
+<p>ESP32-S3 的 GPIO 很灵活，但画硬件时不能只看软件能不能配置。最容易踩坑的是：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">GPIO0 / GPIO3 / GPIO45 / GPIO46
+GPIO26 ~ GPIO37
+GPIO19 / GPIO20
+GPIO43 / GPIO44
+GPIO39 ~ GPIO42
+</code></pre>
+<p>对于关键外设，尤其是 LCD、触摸、I2C、背光、电源控制和复位控制，建议优先使用普通 GPIO，并给所有关键控制脚设计明确的默认电平。</p>
+<p>最实用的一句话：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">启动脚不做关键控制，Flash/PSRAM 脚不碰，USB/UART 调试脚保留，LCD_CS 固定低，LCD_RD 固定高。
+</code></pre>
+<hr>
+<h2>参考资料</h2>
+<ul>
+<li>Espressif ESP-IDF GPIO &amp; RTC GPIO 文档：<code class="notranslate">https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-reference/peripherals/gpio.html</code></li>
+<li>Espressif ESP32-S3 技术参考与 Datasheet：<code class="notranslate">https://www.espressif.com/en/support/documents/technical-documents</code></li>
+</ul></div>
+<div style="font-size:small;margin-top:8px;float:right;"></div>
+
+<button class="btn btn-block" type="button" onclick="openComments()" id="cmButton">评论</button>
+<div class="comments" id="comments"></div>
+
+</div>
+    <div id="footer"><div id="footer1">Copyright © <span id="copyrightYear"></span> <a href="https://yang-yang-NO-1.github.io/blog">杨大爷的山头</a></div>
+<div id="footer2">
+    <span id="runday"></span><span>Powered by <a href="https://meekdai.com/Gmeek.html" target="_blank">Gmeek</a></span>
+</div>
+
+<script>
+var now=new Date();
+document.getElementById("copyrightYear").innerHTML=now.getFullYear();
+
+if(""!=""){
+    var startSite=new Date("");
+    var diff=now.getTime()-startSite.getTime();
+    var diffDay=Math.floor(diff/(1000*60*60*24));
+    document.getElementById("runday").innerHTML="网站运行 "+diffDay+" 天"+" • ";
+}
+</script></div>
+</body>
+<script>
+var IconList={'sun': 'M8 10.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0V.75A.75.75 0 018 0zm0 13a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 018 13zM2.343 2.343a.75.75 0 011.061 0l1.06 1.061a.75.75 0 01-1.06 1.06l-1.06-1.06a.75.75 0 010-1.06zm9.193 9.193a.75.75 0 011.06 0l1.061 1.06a.75.75 0 01-1.06 1.061l-1.061-1.06a.75.75 0 010-1.061zM16 8a.75.75 0 01-.75.75h-1.5a.75.75 0 010-1.5h1.5A.75.75 0 0116 8zM3 8a.75.75 0 01-.75.75H.75a.75.75 0 010-1.5h1.5A.75.75 0 013 8zm10.657-5.657a.75.75 0 010 1.061l-1.061 1.06a.75.75 0 11-1.06-1.06l1.06-1.06a.75.75 0 011.06 0zm-9.193 9.193a.75.75 0 010 1.06l-1.06 1.061a.75.75 0 11-1.061-1.06l1.06-1.061a.75.75 0 011.061 0z', 'moon': 'M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786zm1.616 1.945a7 7 0 01-7.678 7.678 5.5 5.5 0 107.678-7.678z', 'sync': 'M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z', 'home': 'M6.906.664a1.749 1.749 0 0 1 2.187 0l5.25 4.2c.415.332.657.835.657 1.367v7.019A1.75 1.75 0 0 1 13.25 15h-3.5a.75.75 0 0 1-.75-.75V9H7v5.25a.75.75 0 0 1-.75.75h-3.5A1.75 1.75 0 0 1 1 13.25V6.23c0-.531.242-1.034.657-1.366l5.25-4.2Zm1.25 1.171a.25.25 0 0 0-.312 0l-5.25 4.2a.25.25 0 0 0-.094.196v7.019c0 .138.112.25.25.25H5.5V8.25a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 .75.75v5.25h2.75a.25.25 0 0 0 .25-.25V6.23a.25.25 0 0 0-.094-.195Z', 'github': 'M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z'};
+var utterancesLoad=0;
+
+let themeSettings={
+    "dark": ["dark","moon","#00f0ff","dark-blue"],
+    "light": ["light","sun","#ff5000","github-light"],
+    "auto": ["auto","sync","","preferred-color-scheme"]
+};
+function changeTheme(mode, icon, color, utheme){
+    document.documentElement.setAttribute("data-color-mode",mode);
+    document.getElementById("themeSwitch").setAttribute("d",value=IconList[icon]);
+    document.getElementById("themeSwitch").parentNode.style.color=color;
+    if(utterancesLoad==1){utterancesTheme(utheme);}
+}
+function modeSwitch(){
+    let currentMode=document.documentElement.getAttribute('data-color-mode');
+    let newMode = currentMode === "light" ? "dark" : currentMode === "dark" ? "auto" : "light";
+    localStorage.setItem("meek_theme", newMode);
+    if(themeSettings[newMode]){
+        changeTheme(...themeSettings[newMode]);
+    }
+}
+function utterancesTheme(theme){
+    const message={type:'set-theme',theme: theme};
+    const iframe=document.getElementsByClassName('utterances-frame')[0];
+    iframe.contentWindow.postMessage(message,'https://utteranc.es');
+}
+if(themeSettings[theme]){changeTheme(...themeSettings[theme]);}
+console.log("\n %c Gmeek last https://github.com/Meekdai/Gmeek \n","padding:5px 0;background:#02d81d;color:#fff");
+</script>
+
+<script>
+document.getElementById("pathHome").setAttribute("d",IconList["home"]);
+document.getElementById("pathIssue").setAttribute("d",IconList["github"]);
+
+
+
+function openComments(){
+    cm=document.getElementById("comments");
+    cmButton=document.getElementById("cmButton");
+    cmButton.disabled=true;
+    cmButton.innerHTML="loading";
+    span=document.createElement("span");
+    span.setAttribute("class","AnimatedEllipsis");
+    cmButton.appendChild(span);
+
+    script=document.createElement("script");
+    script.setAttribute("src","https://utteranc.es/client.js");
+    script.setAttribute("repo","yang-yang-NO-1/blog");
+    script.setAttribute("issue-term","title");
+    
+    if(localStorage.getItem("meek_theme")=="dark"){script.setAttribute("theme","dark-blue");}
+    else if(localStorage.getItem("meek_theme")=="light") {script.setAttribute("theme","github-light");}
+    else{script.setAttribute("theme","preferred-color-scheme");}
+    
+    script.setAttribute("crossorigin","anonymous");
+    script.setAttribute("async","");
+    cm.appendChild(script);
+
+    int=self.setInterval("iFrameLoading()",200);
+}
+
+function iFrameLoading(){
+    var utterances=document.getElementsByClassName('utterances');
+    if(utterances.length==1){
+        if(utterances[0].style.height!=""){
+            utterancesLoad=1;
+            int=window.clearInterval(int);
+            document.getElementById("cmButton").style.display="none";
+            console.log("utterances Load OK");
+        }
+    }
+}
+
+
+
+</script>
+
+
+</html>
