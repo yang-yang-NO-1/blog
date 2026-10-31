@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html data-color-mode="light" data-dark-theme="dark" data-light-theme="light" lang="zh-CN">
+<head>
+    <meta content="text/html; charset=utf-8" http-equiv="content-type" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <link href='https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/Primer/21.0.7/primer.css' rel='stylesheet' />
+    
+    <link rel="icon" href="https://github.githubassets.com/favicons/favicon.svg"><script>
+        let theme = localStorage.getItem("meek_theme") || "light";
+        document.documentElement.setAttribute("data-color-mode", theme);
+    </script>
+<meta name="description" content="> 记录时间：2026-10-31  
+> 环境：EMQX Cloud Serverless、ESP8266（懒人开关）、微信小程序、WiFiManager、MQTT.js  
+> 本文是一次实际恢复部署记录。">
+<meta property="og:title" content="EMQX Cloud Serverless 被自动删除后，重新部署 ESP8266 + 微信小程序 MQTT 控制系统">
+<meta property="og:description" content="> 记录时间：2026-10-31  
+> 环境：EMQX Cloud Serverless、ESP8266（懒人开关）、微信小程序、WiFiManager、MQTT.js  
+> 本文是一次实际恢复部署记录。">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://yang-yang-NO-1.github.io/blog/post/EMQX%20Cloud%20Serverless%20-bei-zi-dong-shan-chu-hou-%EF%BC%8C-zhong-xin-bu-shu-%20ESP8266%20%2B%20-wei-xin-xiao-cheng-xu-%20MQTT%20-kong-zhi-xi-tong.html">
+<meta property="og:image" content="https://github.githubassets.com/favicons/favicon.svg">
+<title>EMQX Cloud Serverless 被自动删除后，重新部署 ESP8266 + 微信小程序 MQTT 控制系统</title>
+<link href="//unpkg.com/@wooorm/starry-night@2.1.1/style/both.css" rel="stylesheet" />
+
+
+</head>
+<style>
+body{box-sizing: border-box;min-width: 200px;max-width: 900px;margin: 20px auto;padding: 45px;font-size: 16px;font-family: sans-serif;line-height: 1.25;}
+#header{display:flex;padding-bottom:8px;border-bottom: 1px solid var(--borderColor-muted, var(--color-border-muted));margin-bottom: 16px;}
+#footer {margin-top:64px; text-align: center;font-size: small;}
+
+</style>
+
+<style>
+.postTitle{margin: auto 0;font-size:40px;font-weight:bold;}
+.title-right{display:flex;margin:auto 0 0 auto;}
+.title-right .circle{padding: 14px 16px;margin-right:8px;}
+#postBody{border-bottom: 1px solid var(--color-border-default);padding-bottom:36px;}
+#postBody hr{height:2px;}
+#cmButton{height:48px;margin-top:48px;}
+#comments{margin-top:64px;}
+.g-emoji{font-size:24px;}
+@media (max-width: 600px) {
+    body {padding: 8px;}
+    .postTitle{font-size:24px;}
+}
+.copy-feedback {
+    display: none;
+    position: absolute;
+    top: 10px;
+    right: 50px;
+    color: var(--color-fg-on-emphasis);
+    background-color: var(--color-fg-muted);
+    border-radius: 3px;
+    padding: 5px 8px;
+    font-size: 12px;
+}
+</style>
+
+
+
+
+<body>
+    <div id="header">
+<h1 class="postTitle">EMQX Cloud Serverless 被自动删除后，重新部署 ESP8266 + 微信小程序 MQTT 控制系统</h1>
+<div class="title-right">
+    <a href="https://yang-yang-NO-1.github.io/blog" id="buttonHome" class="btn btn-invisible circle" title="首页">
+        <svg class="octicon" width="16" height="16">
+            <path id="pathHome" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+    
+    <a href="https://github.com/yang-yang-NO-1/blog/issues/8" target="_blank" class="btn btn-invisible circle" title="Issue">
+        <svg class="octicon" width="16" height="16">
+            <path id="pathIssue" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+    
+
+    <a class="btn btn-invisible circle" onclick="modeSwitch();" title="切换主题">
+        <svg class="octicon" width="16" height="16" >
+            <path id="themeSwitch" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+
+</div>
+</div>
+    <div id="content">
+<div class="markdown-body" id="postBody"><blockquote>
+<p>记录时间：2026-10-31<br>
+环境：EMQX Cloud Serverless、ESP8266（懒人开关）、微信小程序、WiFiManager、MQTT.js<br>
+本文是一次实际恢复部署记录。示例域名和密码均为占位符，请替换成自己的配置。</p>
+</blockquote>
+<h2>一、背景：好久没用，原来的 EMQX 部署没了</h2>
+<p>之前做过一个基于 ESP8266 + EMQX + 微信小程序的个人 IoT 项目：ESP8266 通过 MQTT 接收开关命令，控制 SG90 舵机；微信小程序负责设备管理和可视化控制。相关代码在 GitHub：</p>
+<ul>
+<li><a href="https://github.com/yang-yang-NO-1/lanrenkaiguan">lanrenkaiguan（ESP8266 懒人开关固件）</a></li>
+<li><a href="https://github.com/yang-yang-NO-1/iot-miniapp-emqx-starter">iot-miniapp-emqx-starter（微信小程序 IoT 控制台）</a></li>
+</ul>
+<p>这次准备重新使用时，发现原来的 EMQX Serverless 部署已经不在了，设备和小程序都无法连接。</p>
+<p>查阅 <a href="https://docs.emqx.com/zh/cloud/latest/create/serverless.html" rel="nofollow">EMQX 官方说明</a>：Serverless 连续 <strong>30 天没有活跃客户端连接</strong>会被系统停止，停止后 <strong>30 天内没有重新启用</strong>则可能被删除。已经删除的部署及其中的数据不能直接恢复。因此决定新建部署、重新创建 MQTT 账号，并把设备端和小程序迁移过去。</p>
+<h2>二、新建 EMQX Serverless 部署</h2>
+<ol>
+<li>打开 <a href="https://cloud.emqx.com/" rel="nofollow">EMQX Cloud 控制台</a>，创建 <strong>Serverless</strong> 部署。</li>
+<li>选择合适的区域，按需设置名称。个人自用可将每月消费限额保持为 <strong>0</strong>，使用免费额度（额度和规则以 EMQX 当时的控制台为准）。</li>
+<li>等待部署运行，在“概览”中找到新部署的 <strong>连接地址（Host）</strong>，复制备用。</li>
+</ol>
+<p>Serverless 默认提供两种加密连接：</p>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th>客户端</th>
+<th>协议</th>
+<th>端口</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ESP8266 / ESP32 等设备</td>
+<td>MQTT over TLS</td>
+<td><code class="notranslate">8883</code></td>
+</tr>
+<tr>
+<td>微信小程序</td>
+<td>MQTT over WSS</td>
+<td><code class="notranslate">8084</code></td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<p><strong>注意：Host 只填服务器域名，不要把 <code class="notranslate">https://</code>、<code class="notranslate">wxs://</code> 或 <code class="notranslate">/mqtt</code> 一起填入 ESP8266 的 MQTT Host。</strong></p>
+<h2>三、重新创建 MQTT 认证账号</h2>
+<p>进入部署的 <strong>访问控制 → 客户端认证 → 添加</strong>，本次只创建两个账号：</p>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th>用户名</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="notranslate">miniapp_home</code></td>
+<td>微信小程序管理员</td>
+</tr>
+<tr>
+<td><code class="notranslate">device</code></td>
+<td>ESP8266 懒人开关</td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<p>两个账号分别设置新的强密码。这是 <strong>MQTT 客户端认证用户</strong>，不是登录 EMQX Cloud 网页的账号。</p>
+<h3>需要手动新建 MQTT Topic 吗？</h3>
+<p><strong>不需要。</strong> 一开始误以为要在 EMQX 中新建多条主题，其实 MQTT Topic 由程序发布/订阅时直接使用，通常不需要事先创建。</p>
+<p>本项目使用的设备主题前缀为：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">u/home/devices/lanrenkaiguan
+</code></pre>
+<p>主要通道如下：</p>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th>Topic 后缀</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="notranslate">/cmd</code></td>
+<td>小程序下发命令</td>
+</tr>
+<tr>
+<td><code class="notranslate">/state</code></td>
+<td>设备状态回传</td>
+</tr>
+<tr>
+<td><code class="notranslate">/status</code></td>
+<td>在线/离线状态</td>
+</tr>
+<tr>
+<td><code class="notranslate">/ack</code></td>
+<td>命令执行回执</td>
+</tr>
+<tr>
+<td><code class="notranslate">/meta</code></td>
+<td>设备元信息</td>
+</tr>
+<tr>
+<td><code class="notranslate">/event</code></td>
+<td>设备事件/调试信息</td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<p>这次是个人自用，沿用 EMQX 默认的<strong>黑名单授权模式</strong>：未被明确 Deny 的发布和订阅操作默认允许，因此没有额外配置逐条 ACL。这个方案配置简单，但意味着<strong>任何拿到有效 MQTT 账号密码的客户端，可能访问其他设备的 Topic</strong>。若以后增加多用户或开放给别人，应该配置最小权限 ACL。参考 <a href="https://docs.emqx.com/zh/cloud/latest/deployments/default_authz.html" rel="nofollow">EMQX 默认授权说明</a>。</p>
+<h2>四、ESP8266 设备端修改 MQTT 连接</h2>
+<p><code class="notranslate">lanrenkaiguan</code> 固件已有 WiFiManager，可以通过配网页修改保存的 Wi-Fi、MQTT 连接参数，不必为了换服务器而整片擦除 Flash。</p>
+<p>进入配网页后，保持设备身份不变，只将服务器地址、用户名和密码更新为新部署的信息：</p>
+<div class="highlight highlight-source-ini"><pre class="notranslate">MQTT <span class="pl-k">Host</span>   = &lt;新 EMQX 部署的 Host&gt;
+MQTT <span class="pl-k">Port</span>   = 8883
+MQTT <span class="pl-k">TLS</span>    = 1
+MQTT <span class="pl-k">User</span>   = device
+MQTT <span class="pl-k">Pass</span>   = &lt;新设置的设备密码&gt;
+Account <span class="pl-k">ID</span>  = device
+Device <span class="pl-k">ID</span>   = lanrenkaiguan
+Topic <span class="pl-k">Base</span>  = u/home/devices</pre></div>
+<p>默认配网热点格式：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">SSID：IoT-Config-lanrenkaiguan
+配网页：http://192.168.4.1
+</code></pre>
+<p>配网热点密码请以自己固件中的 <code class="notranslate">IOT_PORTAL_AP_PASSWORD</code> 为准；公开发布时不建议继续沿用简单的默认密码。</p>
+<h3>关于配网按键</h3>
+<p>这份固件原本的配网键设置为 <code class="notranslate">D7 / GPIO13</code>，在设备运行时长按约 <strong>5 秒</strong>进入配网。我这块自制板的 D7 不方便使用，所以排查时还考虑过改用现有的 <strong>FLASH 按键（GPIO0）</strong>：</p>
+<div class="highlight highlight-source-c++"><pre class="notranslate">#<span class="pl-k">define</span> <span class="pl-en">IOT_PORTAL_BUTTON_PIN</span>         <span class="pl-c1">0</span>
+#<span class="pl-k">define</span> <span class="pl-en">IOT_PORTAL_BUTTON_ACTIVE_LEVEL</span> <span class="pl-c1">LOW</span>
+#<span class="pl-k">define</span> <span class="pl-en">IOT_FORCE_PORTAL_HOLD_MS</span>      <span class="pl-c1">5000UL</span></pre></div>
+<p>若采用该改动，需要<strong>重新编译烧录</strong>；且 GPIO0 是 ESP8266 的启动配置脚，<strong>不能在上电/复位时按住</strong>，否则可能进入串口下载模式。已能通过其他方式进入配网页的设备，无需为本次迁移专门修改按键。</p>
+<p>如果确实需要<strong>同时清除 Wi-Fi 和 MQTT 保存配置</strong>，固件中已提供 <code class="notranslate">Iot.resetSettings(true)</code>：它会清除 WiFiManager 保存的网络信息及 LittleFS 中的 MQTT 配置，并重启设备。注意：这是清除配置，不是普通的“重新进入配网页”；本次只需要换服务器，直接在配网页覆盖参数即可，无须清空。</p>
+<h2>五、微信小程序修改连接地址</h2>
+<p>小程序项目使用 MQTT.js，通过 WebSocket 连接 EMQX。登录页填入：</p>
+<div class="highlight highlight-source-ini"><pre class="notranslate">MQTT WebSocket 地址 = wxs://&lt;新 EMQX Host&gt;:8084/mqtt
+EMQX 用户名          = miniapp_home
+EMQX 密码            = &lt;新设置的小程序密码&gt;
+ClientId 前缀        = miniapp_home
+Topic <span class="pl-k">Base</span>          = u/home</pre></div>
+<p>这里有一个很容易写错的地方：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">正确：wxs://&lt;Host&gt;:8084/mqtt
+错误：wxs://&lt;Host&gt;/mqtt:8084/mqtt
+</code></pre>
+<p><strong><code class="notranslate">8084</code> 必须写在域名后面，<code class="notranslate">/mqtt</code> 只写一次。</strong> 微信小程序代码中使用 <code class="notranslate">wxs://</code>，而微信平台管理后台的 socket 域名以 <code class="notranslate">wss://</code> 形式配置。具体连接端口以 EMQX 控制台显示为准。参考 <a href="https://docs.emqx.com/zh/cloud/latest/connect_to_deployments/wechat_miniprogram.html" rel="nofollow">EMQX 微信小程序连接文档</a>。</p>
+<h3>微信公众平台后台也要更新</h3>
+<p>因为更换了 EMQX 部署，连接域名也变了。进入：</p>
+<p><strong>微信公众平台 → 开发 → 开发管理 → 开发设置 → 服务器域名 → socket 合法域名</strong></p>
+<p>把旧部署的域名替换成<strong>新部署域名</strong>，按微信后台对协议及端口的校验要求保存。这里是 <code class="notranslate">wss://</code>，不要填小程序代码使用的 <code class="notranslate">wxs://</code>；是否需要显式填写 <code class="notranslate">:8084</code>，应以微信后台当前规则和实际请求端口为准。</p>
+<p>另外，项目的 <code class="notranslate">miniprogram/pages/access-login/access-login.js</code> 中也有旧服务器的默认地址常量，后续重新发布版本时应同步更新，避免新手机首次进入时自动出现失效域名。不要把真实密码写入公开仓库。</p>
+<h2>六、在小程序中重新添加懒人开关</h2>
+<p>开发者工具登录成功后，打开 <strong>添加设备</strong> 页面，填写：</p>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>设备 ID</td>
+<td><code class="notranslate">lanrenkaiguan</code></td>
+</tr>
+<tr>
+<td>设备名称</td>
+<td><code class="notranslate">懒人开关</code></td>
+</tr>
+<tr>
+<td>设备类型</td>
+<td><code class="notranslate">servo_switch</code></td>
+</tr>
+<tr>
+<td>Topic Prefix</td>
+<td><strong>留空</strong></td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<p>Topic Prefix 留空后，小程序会按照 <code class="notranslate">Topic Base + /devices/ + 设备 ID</code> 自动生成：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">u/home/devices/lanrenkaiguan
+</code></pre>
+<p>点击保存后，再确保 ESP8266 已通过新 MQTT 地址成功上线。<strong>“添加设备成功”只是登记设备信息，不代表设备已经在线。</strong></p>
+<p>如果要手动测试控制命令，可以通过 MQTTX 发布到：</p>
+<pre lang="text" class="notranslate"><code class="notranslate">Topic：u/home/devices/lanrenkaiguan/cmd
+Retain：false
+</code></pre>
+<p>示例 Payload：</p>
+<div class="highlight highlight-source-json"><pre class="notranslate">{<span class="pl-ent">"msgId"</span>:<span class="pl-s"><span class="pl-pds">"</span>cmd_test_on<span class="pl-pds">"</span></span>,<span class="pl-ent">"action"</span>:<span class="pl-s"><span class="pl-pds">"</span>set<span class="pl-pds">"</span></span>,<span class="pl-ent">"params"</span>:{<span class="pl-ent">"relay"</span>:<span class="pl-c1">1</span>},<span class="pl-ent">"widgetId"</span>:<span class="pl-s"><span class="pl-pds">"</span>w_lanrenkaiguan_relay<span class="pl-pds">"</span></span>}</pre></div>
+<p>正常情况下设备会执行舵机动作，并在 <code class="notranslate">/ack</code>、<code class="notranslate">/state</code> 等主题返回消息。</p>
+<h2>七、遇到的问题：开发者工具正常，安卓手机最初超时</h2>
+<p>这次迁移最容易让人误判的地方，是手机端第一次连接失败，弹窗提示：</p>
+<blockquote>
+<p>连接超时，请检查 EMQX 用户名、密码、WSS 地址、socket 合法域名和 ACL。</p>
+</blockquote>
+<p>排查过程是：</p>
+<ol>
+<li>新 EMQX 部署已经运行，两个 MQTT 账号已创建。</li>
+<li>微信小程序改用了新地址，微信后台的 socket 合法域名也更新了。</li>
+<li><strong>微信开发者工具能成功登录</strong>，添加懒人开关后也能正常控制。</li>
+<li><strong>安卓手机第一次打开小程序时超时</strong>。</li>
+<li>后来进行真机调试，没有出现问题；再重新打开手机小程序，<strong>没有改 MQTT 密码</strong>，登录和控制也都恢复正常。</li>
+</ol>
+<p>因此，这次最终 <strong>不需要额外搭建 443 反向代理，也不需要修改 MQTT 用户密码</strong>。首次超时可能与后台域名配置生效、手机端缓存/旧连接状态或临时 WebSocket 握手失败有关，但当时没有记录到足以定位根因的底层网络错误，不能确定是哪一个。</p>
+<p>这里也不能得出“所有安卓微信都支持 8084”的结论，只能说<strong>我这台手机和这次部署的组合已经实测可用</strong>。</p>
+<h2>八、最终验证结果</h2>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th>验证项</th>
+<th>本次结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>新 EMQX Serverless 部署</td>
+<td>正常</td>
+</tr>
+<tr>
+<td><code class="notranslate">miniapp_home</code> MQTT 登录</td>
+<td>正常</td>
+</tr>
+<tr>
+<td><code class="notranslate">device</code> 设备账号连接</td>
+<td>正常</td>
+</tr>
+<tr>
+<td>ESP8266 懒人开关在线</td>
+<td>正常</td>
+</tr>
+<tr>
+<td>微信开发者工具控制</td>
+<td>正常</td>
+</tr>
+<tr>
+<td>安卓手机小程序登录</td>
+<td>正常</td>
+</tr>
+<tr>
+<td>安卓手机实际控制设备</td>
+<td>正常</td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<p>原有的 ESP8266 + EMQX + 微信小程序控制功能已经恢复。</p>
+<h2>九、这次迁移之后的注意事项</h2>
+<h3>1. 及时备份控制台配置</h3>
+<p>微信小程序有 <strong>维护工具 → 导出完整配置</strong>，也能将设备列表、面板布局、场景、定时等同步为 EMQX retained 消息。如果旧部署被删，旧 broker 内的 retained 不会自动出现在新部署。若原手机仍保留本地设备和面板数据，可以在新 broker 上重新同步。</p>
+<p><strong>注意：导出的备份可能包含 MQTT 登录信息，不应公开上传。</strong></p>
+<h3>2. 避免下次又因长期不用被删除</h3>
+<p>Serverless 长时间无活跃连接可能被系统停止，停止后长期不恢复可能被删除。建议定期检查部署运行状态，并保留设备/小程序的本地备份。仅“设备以前配置过自动重连”不意味着设备当前一定在线。</p>
+<h3>3. 保护账号和源码</h3>
+<p>设备和小程序使用不同的强密码；即使是自用，最好也不要把真实 MQTT 密码、Wi-Fi 密码写进公开 GitHub。后续可进一步补上 ACL 最小权限和设备端 TLS 服务器证书验证。</p>
+<h2>十、总结</h2>
+<p>这次恢复其实比最初想的简单得多：</p>
+<p><strong>1 个 EMQX Serverless 部署 + 2 个 MQTT 认证账号 + 更新 ESP8266 和微信小程序连接地址 + 更新微信后台 socket 合法域名，即可恢复原有控制功能。</strong></p>
+<p>不需要手动创建每一个 MQTT Topic。个人自用可以先利用默认授权模式恢复服务，但正式面向多人使用时仍应配置 ACL。</p>
+<hr>
+<p><strong>参考资料</strong></p>
+<ul>
+<li><a href="https://docs.emqx.com/zh/cloud/latest/create/serverless.html" rel="nofollow">EMQX Cloud：创建 Serverless 部署</a></li>
+<li><a href="https://docs.emqx.com/zh/cloud/latest/deployments/port_guide_serverless.html" rel="nofollow">EMQX Cloud：Serverless 连接指引</a></li>
+<li><a href="https://docs.emqx.com/zh/cloud/latest/connect_to_deployments/wechat_miniprogram.html" rel="nofollow">EMQX Cloud：微信小程序连接教程</a></li>
+<li><a href="https://docs.emqx.com/zh/cloud/latest/deployments/default_authz.html" rel="nofollow">EMQX Cloud：默认授权</a></li>
+</ul></div>
+<div style="font-size:small;margin-top:8px;float:right;"></div>
+
+<button class="btn btn-block" type="button" onclick="openComments()" id="cmButton">评论</button>
+<div class="comments" id="comments"></div>
+
+</div>
+    <div id="footer"><div id="footer1">Copyright © <span id="copyrightYear"></span> <a href="https://yang-yang-NO-1.github.io/blog">杨大爷的山头</a></div>
+<div id="footer2">
+    <span id="runday"></span><span>Powered by <a href="https://meekdai.com/Gmeek.html" target="_blank">Gmeek</a></span>
+</div>
+
+<script>
+var now=new Date();
+document.getElementById("copyrightYear").innerHTML=now.getFullYear();
+
+if(""!=""){
+    var startSite=new Date("");
+    var diff=now.getTime()-startSite.getTime();
+    var diffDay=Math.floor(diff/(1000*60*60*24));
+    document.getElementById("runday").innerHTML="网站运行 "+diffDay+" 天"+" • ";
+}
+</script></div>
+</body>
+<script>
+var IconList={'sun': 'M8 10.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0V.75A.75.75 0 018 0zm0 13a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 018 13zM2.343 2.343a.75.75 0 011.061 0l1.06 1.061a.75.75 0 01-1.06 1.06l-1.06-1.06a.75.75 0 010-1.06zm9.193 9.193a.75.75 0 011.06 0l1.061 1.06a.75.75 0 01-1.06 1.061l-1.061-1.06a.75.75 0 010-1.061zM16 8a.75.75 0 01-.75.75h-1.5a.75.75 0 010-1.5h1.5A.75.75 0 0116 8zM3 8a.75.75 0 01-.75.75H.75a.75.75 0 010-1.5h1.5A.75.75 0 013 8zm10.657-5.657a.75.75 0 010 1.061l-1.061 1.06a.75.75 0 11-1.06-1.06l1.06-1.06a.75.75 0 011.06 0zm-9.193 9.193a.75.75 0 010 1.06l-1.06 1.061a.75.75 0 11-1.061-1.06l1.06-1.061a.75.75 0 011.061 0z', 'moon': 'M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786zm1.616 1.945a7 7 0 01-7.678 7.678 5.5 5.5 0 107.678-7.678z', 'sync': 'M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z', 'home': 'M6.906.664a1.749 1.749 0 0 1 2.187 0l5.25 4.2c.415.332.657.835.657 1.367v7.019A1.75 1.75 0 0 1 13.25 15h-3.5a.75.75 0 0 1-.75-.75V9H7v5.25a.75.75 0 0 1-.75.75h-3.5A1.75 1.75 0 0 1 1 13.25V6.23c0-.531.242-1.034.657-1.366l5.25-4.2Zm1.25 1.171a.25.25 0 0 0-.312 0l-5.25 4.2a.25.25 0 0 0-.094.196v7.019c0 .138.112.25.25.25H5.5V8.25a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 .75.75v5.25h2.75a.25.25 0 0 0 .25-.25V6.23a.25.25 0 0 0-.094-.195Z', 'github': 'M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z', 'copy': 'M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z', 'check': 'M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z'};
+var utterancesLoad=0;
+
+let themeSettings={
+    "dark": ["dark","moon","#00f0ff","dark-blue"],
+    "light": ["light","sun","#ff5000","github-light"],
+    "auto": ["auto","sync","","preferred-color-scheme"]
+};
+function changeTheme(mode, icon, color, utheme){
+    document.documentElement.setAttribute("data-color-mode",mode);
+    document.getElementById("themeSwitch").setAttribute("d",value=IconList[icon]);
+    document.getElementById("themeSwitch").parentNode.style.color=color;
+    if(utterancesLoad==1){utterancesTheme(utheme);}
+}
+function modeSwitch(){
+    let currentMode=document.documentElement.getAttribute('data-color-mode');
+    let newMode = currentMode === "light" ? "dark" : currentMode === "dark" ? "auto" : "light";
+    localStorage.setItem("meek_theme", newMode);
+    if(themeSettings[newMode]){
+        changeTheme(...themeSettings[newMode]);
+    }
+}
+function utterancesTheme(theme){
+    const message={type:'set-theme',theme: theme};
+    const iframe=document.getElementsByClassName('utterances-frame')[0];
+    iframe.contentWindow.postMessage(message,'https://utteranc.es');
+}
+if(themeSettings[theme]){changeTheme(...themeSettings[theme]);}
+console.log("\n %c Gmeek last https://github.com/Meekdai/Gmeek \n","padding:5px 0;background:#02d81d;color:#fff");
+</script>
+
+<script>
+document.getElementById("pathHome").setAttribute("d",IconList["home"]);
+document.getElementById("pathIssue").setAttribute("d",IconList["github"]);
+
+
+
+function openComments(){
+    cm=document.getElementById("comments");
+    cmButton=document.getElementById("cmButton");
+    cmButton.disabled=true;
+    cmButton.innerHTML="loading";
+    span=document.createElement("span");
+    span.setAttribute("class","AnimatedEllipsis");
+    cmButton.appendChild(span);
+
+    script=document.createElement("script");
+    script.setAttribute("src","https://utteranc.es/client.js");
+    script.setAttribute("repo","yang-yang-NO-1/blog");
+    script.setAttribute("issue-term","title");
+    
+    if(localStorage.getItem("meek_theme")=="dark"){script.setAttribute("theme","dark-blue");}
+    else if(localStorage.getItem("meek_theme")=="light") {script.setAttribute("theme","github-light");}
+    else{script.setAttribute("theme","preferred-color-scheme");}
+    
+    script.setAttribute("crossorigin","anonymous");
+    script.setAttribute("async","");
+    cm.appendChild(script);
+
+    int=self.setInterval("iFrameLoading()",200);
+}
+
+function iFrameLoading(){
+    var utterances=document.getElementsByClassName('utterances');
+    if(utterances.length==1){
+        if(utterances[0].style.height!=""){
+            utterancesLoad=1;
+            int=window.clearInterval(int);
+            document.getElementById("cmButton").style.display="none";
+            console.log("utterances Load OK");
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const createClipboardHTML = (codeContent, additionalClasses = '') => `
+        <pre class="notranslate"><code class="notranslate">${codeContent}</code></pre>
+        <div class="clipboard-container position-absolute right-0 top-0 ${additionalClasses}">
+            <clipboard-copy class="ClipboardButton btn m-2 p-0" role="button" style="display: inherit;">
+                <svg height="16" width="16" class="octicon octicon-copy m-2"><path d="${IconList["copy"]}"></path></svg>
+                <svg height="16" width="16" class="octicon octicon-check color-fg-success m-2 d-none"><path d="${IconList["check"]}"></path></svg>
+            </clipboard-copy>
+            <div class="copy-feedback">Copied!</div>
+        </div>
+    `;
+
+    const handleCodeElements = (selector = '') => {
+        document.querySelectorAll(selector).forEach(codeElement => {
+            const codeContent = codeElement.innerHTML;
+            const newStructure = document.createElement('div');
+            newStructure.className = 'snippet-clipboard-content position-relative overflow-auto';
+            newStructure.innerHTML = createClipboardHTML(codeContent);
+
+            const parentElement = codeElement.parentElement;
+            if (selector.includes('highlight')) {
+                parentElement.insertBefore(newStructure, codeElement.nextSibling);
+                parentElement.removeChild(codeElement);
+            } else {
+                parentElement.parentElement.replaceChild(newStructure, parentElement);
+            }
+        });
+    };
+
+    handleCodeElements('pre.notranslate > code.notranslate');
+    handleCodeElements('div.highlight > pre.notranslate');
+
+    let currentFeedback = null;
+    document.querySelectorAll('clipboard-copy').forEach(copyButton => {
+        copyButton.addEventListener('click', () => {
+            const codeContent = copyButton.closest('.snippet-clipboard-content').innerText;
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = codeContent;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextArea);
+
+            const copyIcon = copyButton.querySelector('.octicon-copy');
+            const checkIcon = copyButton.querySelector('.octicon-check');
+            const copyFeedback = copyButton.nextElementSibling;
+
+            if (currentFeedback && currentFeedback !== copyFeedback) {currentFeedback.style.display = 'none';}
+            currentFeedback = copyFeedback;
+
+            copyIcon.classList.add('d-none');
+            checkIcon.classList.remove('d-none');
+            copyFeedback.style.display = 'block';
+            copyButton.style.borderColor = 'var(--color-success-fg)';
+
+            setTimeout(() => {
+                copyIcon.classList.remove('d-none');
+                checkIcon.classList.add('d-none');
+                copyFeedback.style.display = 'none';
+                copyButton.style.borderColor = '';
+            }, 2000);
+        });
+    });
+});
+
+</script>
+
+
+</html>
